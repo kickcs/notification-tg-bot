@@ -4,34 +4,31 @@ RUN apt-get update && apt-get install -y openssl ca-certificates && rm -rf /var/
 
 WORKDIR /app
 
-COPY package.json yarn.lock ./
+COPY package*.json ./
 
 FROM base AS dependencies
 
-RUN corepack enable && corepack prepare yarn@stable --activate
-RUN yarn install --frozen-lockfile
+RUN npm ci --only=production
 
 FROM base AS build
 
-RUN corepack enable && corepack prepare yarn@stable --activate
 COPY --from=dependencies /app/node_modules ./node_modules
 COPY . .
 
-RUN yarn prisma:generate
-RUN yarn build
+RUN npm install
+RUN npx prisma generate
+RUN npm run build
 
 FROM base AS production
-
-RUN corepack enable && corepack prepare yarn@stable --activate
 
 ENV NODE_ENV=production
 
 COPY --from=dependencies /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist
 COPY --from=build /app/prisma ./prisma
-COPY package.json ./
+COPY package*.json ./
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
   CMD node -e "require('child_process').exec('ps aux | grep \"node dist/index.js\" | grep -v grep', (err, stdout) => { if (!stdout) process.exit(1); })"
 
-CMD ["sh", "-c", "yarn prisma migrate deploy && node dist/index.js"]
+CMD ["sh", "-c", "npx prisma migrate deploy && node dist/index.js"]
