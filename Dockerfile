@@ -1,6 +1,6 @@
-FROM node:18-alpine AS base
+FROM node:18-slim AS base
 
-RUN corepack enable && corepack prepare yarn@stable --activate
+RUN apt-get update && apt-get install -y openssl ca-certificates && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
@@ -8,10 +8,12 @@ COPY package.json yarn.lock ./
 
 FROM base AS dependencies
 
+RUN corepack enable && corepack prepare yarn@stable --activate
 RUN yarn install --frozen-lockfile
 
 FROM base AS build
 
+RUN corepack enable && corepack prepare yarn@stable --activate
 COPY --from=dependencies /app/node_modules ./node_modules
 COPY . .
 
@@ -19,6 +21,8 @@ RUN yarn prisma:generate
 RUN yarn build
 
 FROM base AS production
+
+RUN corepack enable && corepack prepare yarn@stable --activate
 
 ENV NODE_ENV=production
 
