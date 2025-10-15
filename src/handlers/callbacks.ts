@@ -46,6 +46,14 @@ async function handleConfirmReminder(ctx: Context) {
 
     const rewardMessage = await getRandomTemplate('reward');
     
+    if (ctx.callbackQuery?.message) {
+      try {
+        await ctx.deleteMessage();
+      } catch (error) {
+        console.error('Не удалось удалить сообщение:', error);
+      }
+    }
+    
     await ctx.reply(rewardMessage);
 
     console.log(`✅ Напоминание ${reminderId} подтверждено пользователем ${userId}`);
