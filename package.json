@@ -10,9 +10,13 @@
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:studio": "prisma studio",
+    "prisma:seed": "tsx prisma/seed.ts",
     "docker:up": "docker-compose up -d",
     "docker:down": "docker-compose down",
     "docker:logs": "docker-compose logs -f"
+  },
+  "prisma": {
+    "seed": "tsx prisma/seed.ts"
   },
   "keywords": [
     "telegram",
@@ -24,15 +28,17 @@
   "author": "",
   "license": "MIT",
   "dependencies": {
-    "grammy": "^1.21.1",
     "@prisma/client": "^5.7.1",
-    "dotenv": "^16.3.1"
+    "dotenv": "^16.3.1",
+    "grammy": "^1.21.1",
+    "node-cron": "^3.0.3"
   },
   "devDependencies": {
     "@types/node": "^20.10.6",
-    "typescript": "^5.3.3",
+    "@types/node-cron": "^3.0.11",
+    "prisma": "^5.7.1",
     "tsx": "^4.7.0",
-    "prisma": "^5.7.1"
+    "typescript": "^5.3.3"
   },
   "engines": {
     "node": ">=18.0.0"

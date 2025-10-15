@@ -13,10 +13,12 @@ model User {
   username  String?
   firstName String?
   lastName  String?
+  chatId    BigInt?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   
   notifications Notification[]
+  schedules     Schedule[]
   
   @@map("users")
 }
@@ -31,4 +33,58 @@ model Notification {
   
   @@map("notifications")
   @@index([userId])
+}
+
+model Schedule {
+  id        String   @id @default(uuid())
+  userId    String
+  chatId    BigInt
+  times     String[]
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  reminders Reminder[]
+  
+  @@map("schedules")
+  @@index([userId])
+  @@index([chatId])
+}
+
+model Reminder {
+  id          String   @id @default(uuid())
+  scheduleId  String
+  status      String   @default("pending")
+  retryCount  Int      @default(0)
+  sentAt      DateTime @default(now())
+  
+  schedule      Schedule       @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
+  confirmations Confirmation[]
+  
+  @@map("reminders")
+  @@index([scheduleId])
+  @@index([status])
+}
+
+model Confirmation {
+  id         String   @id @default(uuid())
+  reminderId String
+  confirmedAt DateTime @default(now())
+  
+  reminder   Reminder @relation(fields: [reminderId], references: [id], onDelete: Cascade)
+  
+  @@map("confirmations")
+  @@index([reminderId])
+}
+
+model MessageTemplate {
+  id        String   @id @default(uuid())
+  type      String
+  content   String
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  
+  @@map("message_templates")
+  @@index([type])
 }
