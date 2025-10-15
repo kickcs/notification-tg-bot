@@ -121,13 +121,21 @@ yarn dev
 
 ## Production Deployment
 
-Для развертывания на VDS см. **[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)**
+### Автоматическая установка (Cloud-init)
 
-Краткая инструкция:
+Используйте **[cloud-init.yml](cloud-init.yml)** для автоматической настройки VDS при создании сервера.
+
+Подробная инструкция: **[docs/CLOUD-INIT.md](docs/CLOUD-INIT.md)**
+
+### Ручная установка
+
+Полная инструкция: **[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)**
+
+Краткая версия:
 
 ```bash
 # На VDS
-git clone https://github.com/your-username/notification-tg-bot.git
+git clone https://github.com/kickcs/notification-tg-bot.git
 cd notification-tg-bot
 cp .env.production.example .env
 nano .env  # Заполните переменные
