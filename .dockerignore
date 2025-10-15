@@ -12,3 +12,9 @@ yarn-debug.log*
 yarn-error.log*
 README.md
 .DS_Store
+openspec
+docs
+*.md
+!prisma/*.md
+.yarn/cache
+.yarn/install-state.gz

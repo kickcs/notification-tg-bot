@@ -27,6 +27,7 @@ COPY --from=build /app/dist ./dist
 COPY --from=build /app/prisma ./prisma
 COPY package.json ./
 
-EXPOSE 3000
+HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+  CMD node -e "require('child_process').exec('ps aux | grep \"node dist/index.js\" | grep -v grep', (err, stdout) => { if (!stdout) process.exit(1); })"
 
 CMD ["sh", "-c", "yarn prisma migrate deploy && node dist/index.js"]

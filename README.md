@@ -47,7 +47,16 @@ notification-tg-bot/
 │   ├── schema.prisma             # Схема базы данных
 │   └── seed.ts                   # Seed данные для шаблонов
 ├── Dockerfile                    # Docker образ
-├── docker-compose.yml            # Docker Compose конфигурация
+├── docker-compose.yml            # Docker Compose (development)
+├── docker-compose.prod.yml       # Docker Compose (production)
+├── deploy.sh                     # Скрипт деплоя
+├── backup.sh                     # Скрипт бэкапа БД
+├── restore.sh                    # Скрипт восстановления БД
+├── logs.sh                       # Скрипт просмотра логов
+├── systemd/
+│   └── notification-bot.service  # Systemd service
+├── docs/
+│   └── DEPLOYMENT.md             # Инструкция по деплою
 ├── package.json                  # Зависимости
 ├── tsconfig.json                 # TypeScript конфигурация
 └── .env.example                  # Пример переменных окружения
@@ -108,6 +117,21 @@ yarn prisma:seed
 
 ```bash
 yarn dev
+```
+
+## Production Deployment
+
+Для развертывания на VDS см. **[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)**
+
+Краткая инструкция:
+
+```bash
+# На VDS
+git clone https://github.com/your-username/notification-tg-bot.git
+cd notification-tg-bot
+cp .env.production.example .env
+nano .env  # Заполните переменные
+./deploy.sh
 ```
 
 ## Доступные команды
