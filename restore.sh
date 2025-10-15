@@ -29,7 +29,7 @@ fi
 source .env
 
 echo "🛑 Остановка бота..."
-docker-compose -f docker-compose.prod.yml stop bot
+docker compose -f docker-compose.prod.yml stop bot
 
 echo "🗑️  Очистка базы данных..."
 docker exec notification-bot-db-prod psql \
@@ -43,6 +43,6 @@ cat "$BACKUP_FILE" | docker exec -i notification-bot-db-prod psql \
   -d "${POSTGRES_DB:-notification_bot}"
 
 echo "🚀 Перезапуск бота..."
-docker-compose -f docker-compose.prod.yml start bot
+docker compose -f docker-compose.prod.yml start bot
 
 echo "✅ Восстановление завершено!"
