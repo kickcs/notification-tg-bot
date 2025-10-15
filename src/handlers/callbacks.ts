@@ -46,11 +46,15 @@ async function handleConfirmReminder(ctx: Context) {
 
     const rewardMessage = await getRandomTemplate('reward');
     
-    if (ctx.callbackQuery?.message) {
+    try {
+      await ctx.deleteMessage();
+    } catch (error) {
+      console.error('Не удалось удалить сообщение:', error);
       try {
-        await ctx.deleteMessage();
-      } catch (error) {
-        console.error('Не удалось удалить сообщение:', error);
+        await ctx.editMessageText('✅ Подтверждено!');
+        await ctx.editMessageReplyMarkup({ reply_markup: { inline_keyboard: [] } });
+      } catch (editError) {
+        console.error('Не удалось отредактировать сообщение:', editError);
       }
     }
     

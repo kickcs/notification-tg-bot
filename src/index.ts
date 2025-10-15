@@ -127,7 +127,11 @@ bot.command('history', async (ctx) => {
 registerCommands(bot);
 registerCallbacks(bot);
 
-bot.on('message', async (ctx) => {
+bot.on('message:text', async (ctx) => {
+  if (ctx.message?.text?.startsWith('/')) {
+    return;
+  }
+  
   await ctx.reply(
     'Доступные команды:\n' +
     '/start - Регистрация\n' +
