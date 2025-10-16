@@ -61,8 +61,7 @@ notification-tg-bot/
 │       └── deploy.yml            # GitHub Actions CI/CD
 ├── docs/
 │   ├── DEPLOYMENT.md             # Инструкция по деплою
-│   ├── CI-CD.md                  # Инструкция по CI/CD
-│   └── CLOUD-INIT.md             # Cloud-init настройка
+│   └── CI-CD.md                  # Инструкция по CI/CD
 ├── package.json                  # Зависимости
 ├── tsconfig.json                 # TypeScript конфигурация
 └── .env.example                  # Пример переменных окружения
@@ -138,12 +137,6 @@ yarn dev
 - `SSH_HOST` - IP адрес сервера
 - `SSH_USER` - пользователь для SSH
 - `DEPLOY_PATH` - путь к проекту
-
-### Автоматическая установка (Cloud-init)
-
-Используйте **[cloud-init.yml](cloud-init.yml)** для автоматической настройки VDS при создании сервера.
-
-Подробная инструкция: **[docs/CLOUD-INIT.md](docs/CLOUD-INIT.md)**
 
 ### Ручная установка
 
