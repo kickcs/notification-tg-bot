@@ -1,7 +1,7 @@
 import cron from 'node-cron';
 import { Bot, InlineKeyboard } from 'grammy';
 import { getAllActiveSchedules } from '../services/scheduleService';
-import { createReminder, incrementRetryCount, markReminderAsMissed } from '../services/reminderService';
+import { createReminder, incrementRetryCount, markReminderAsMissed, updateReminderMessageId } from '../services/reminderService';
 import { getRandomTemplate } from '../services/templateService';
 import { timeToCron } from '../utils/timeUtils';
 
@@ -68,9 +68,11 @@ async function sendReminder(bot: Bot, scheduleId: string, userId: string, chatId
     
     const keyboard = new InlineKeyboard().text('✅ Подтвердить', `confirm_reminder:${reminder.id}`);
     
-    await bot.api.sendMessage(chatId.toString(), message, {
+    const sentMessage = await bot.api.sendMessage(chatId.toString(), message, {
       reply_markup: keyboard,
     });
+    
+    await updateReminderMessageId(reminder.id, sentMessage.message_id);
     
     scheduleRetry(bot, reminder.id, userId, chatId, 0);
     
@@ -101,12 +103,22 @@ function scheduleRetry(bot: Bot, reminderId: string, userId: string, chatId: big
         return;
       }
       
+      if (reminder.messageId) {
+        try {
+          await bot.api.deleteMessage(chatId.toString(), reminder.messageId);
+        } catch (deleteError) {
+          console.warn(`⚠️  Не удалось удалить предыдущее сообщение ${reminder.messageId}:`, deleteError);
+        }
+      }
+      
       const message = await getRandomTemplate('reminder');
       const keyboard = new InlineKeyboard().text('✅ Подтвердить', `confirm_reminder:${reminderId}`);
       
-      await bot.api.sendMessage(chatId.toString(), `🔔 Повторное напоминание:\n\n${message}`, {
+      const sentMessage = await bot.api.sendMessage(chatId.toString(), `🔔 Повторное напоминание:\n\n${message}`, {
         reply_markup: keyboard,
       });
+      
+      await updateReminderMessageId(reminderId, sentMessage.message_id);
       
       scheduleRetry(bot, reminderId, userId, chatId, reminder.retryCount);
       

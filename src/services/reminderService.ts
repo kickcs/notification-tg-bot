@@ -57,3 +57,10 @@ export async function getReminder(reminderId: string) {
     },
   });
 }
+
+export async function updateReminderMessageId(reminderId: string, messageId: number) {
+  return await prisma.reminder.update({
+    where: { id: reminderId },
+    data: { messageId },
+  });
+}

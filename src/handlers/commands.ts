@@ -13,6 +13,7 @@ export function registerCommands(bot: Bot) {
     bot.command('editreminder', handleEditReminder);
     bot.command('deletereminder', handleDeleteReminder);
     bot.command('help', handleHelp);
+    bot.command('whoami', handleWhoami);
     
     bot.command('addreminder', isAdmin, handleAddReminder);
     bot.command('addreward', isAdmin, handleAddReward);
@@ -235,6 +236,7 @@ async function handleHelp(ctx: Context) {
         '🔹 /editreminder <время> - Изменить расписание\n' +
         '   Пример: /editreminder 10:00,16:00\n\n' +
         '🔹 /deletereminder - Удалить расписание\n\n' +
+        '🔹 /whoami - Проверить свой статус и ID\n\n' +
         '🔹 /help - Показать эту справку\n\n' +
         '💡 Формат времени: HH:MM (24-часовой)\n' +
         '💡 Несколько времен указывайте через запятую';
@@ -375,4 +377,33 @@ async function handleListMessages(ctx: Context) {
         console.error('Ошибка при получении списка шаблонов:', error);
         await ctx.reply('❌ Произошла ошибка при получении списка шаблонов');
     }
+}
+
+async function handleWhoami(ctx: Context) {
+    const telegramId = ctx.from?.id;
+
+    if (!telegramId) {
+        return ctx.reply('❌ Не удалось получить информацию о пользователе');
+    }
+
+    let message = `👤 Ваша информация:\n\n`;
+    message += `🆔 Telegram ID: ${telegramId}\n\n`;
+
+    if (!config.adminTelegramId) {
+        message += '⚠️ Административные функции не настроены\n';
+        message += 'ADMIN_TELEGRAM_ID не установлен в конфигурации';
+    } else if (BigInt(telegramId) === config.adminTelegramId) {
+        message += '👑 Статус: Администратор\n\n';
+        message += 'У вас есть доступ к административным командам:\n';
+        message += '• /addreminder - добавить шаблон напоминания\n';
+        message += '• /addreward - добавить шаблон награды\n';
+        message += '• /deletemessage - удалить шаблон\n';
+        message += '• /listmessages - показать все шаблоны';
+    } else {
+        message += '👤 Статус: Обычный пользователь\n\n';
+        message += 'Вы можете использовать основные команды бота.\n';
+        message += 'Используйте /help для просмотра доступных команд.';
+    }
+
+    await ctx.reply(message);
 }

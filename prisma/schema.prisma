@@ -58,6 +58,7 @@ model Reminder {
   status      String   @default("pending")
   retryCount  Int      @default(0)
   sentAt      DateTime @default(now())
+  messageId   Int?
   
   schedule      Schedule       @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
   confirmations Confirmation[]
