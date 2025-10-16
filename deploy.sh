@@ -22,8 +22,25 @@ fi
 
 echo "✅ Проверки пройдены"
 
+echo "🔄 Синхронизация с origin/main..."
+git fetch origin
+CURRENT_COMMIT=$(git rev-parse HEAD)
+ORIGIN_COMMIT=$(git rev-parse origin/main)
+
+if [ "$CURRENT_COMMIT" != "$ORIGIN_COMMIT" ]; then
+    echo "⚠️  Локальная версия отличается от origin/main"
+    echo "📥 Сброс к origin/main..."
+    git reset --hard origin/main
+    echo "✅ Синхронизация завершена"
+else
+    echo "✅ Уже на актуальной версии"
+fi
+
 echo "🛑 Остановка старых контейнеров..."
 docker compose -f docker-compose.prod.yml down || true
+
+echo "🗑️  Удаление старых образов..."
+docker images | grep notification-tg-bot | awk '{print $3}' | xargs -r docker rmi -f 2>/dev/null || true
 
 echo "🏗️  Сборка Docker образов..."
 docker compose -f docker-compose.prod.yml build --no-cache
@@ -39,6 +56,7 @@ docker compose -f docker-compose.prod.yml ps
 
 echo ""
 echo "✅ Деплой завершен!"
+echo "📝 Текущий коммит: $(git log --oneline -1)"
 echo ""
 echo "Полезные команды:"
 echo "  docker compose -f docker-compose.prod.yml logs -f     # Просмотр логов"

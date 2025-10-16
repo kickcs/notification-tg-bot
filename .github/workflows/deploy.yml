@@ -52,8 +52,10 @@ jobs:
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
             cd ${{ secrets.DEPLOY_PATH }}
-            echo "📥 Pulling latest changes..."
-            git pull origin main
+            echo "📥 Fetching latest changes..."
+            git fetch origin
+            echo "🔄 Resetting to origin/main..."
+            git reset --hard origin/main
             echo "🚀 Starting deployment..."
             ./deploy.sh
             echo "✅ Deployment completed!"
@@ -66,11 +68,16 @@ jobs:
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
             cd ${{ secrets.DEPLOY_PATH }}
+            echo "📊 Container status:"
             docker compose -f docker-compose.prod.yml ps
+            echo ""
             echo "🔍 Checking bot status..."
             if docker compose -f docker-compose.prod.yml ps | grep -q "Up"; then
               echo "✅ Bot is running"
+              echo "📝 Current commit: $(git log --oneline -1)"
             else
               echo "❌ Bot is not running"
+              echo "📋 Recent logs:"
+              docker compose -f docker-compose.prod.yml logs --tail=50 bot
               exit 1
             fi

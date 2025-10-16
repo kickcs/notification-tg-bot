@@ -27,3 +27,6 @@ coverage/
 .nyc_output/
 
 *.tsbuildinfo
+
+backups/*.sql
+backups/*.tar.gz
