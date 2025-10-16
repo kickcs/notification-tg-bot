@@ -43,6 +43,7 @@ services:
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-notification_bot}?schema=public
       BOT_TOKEN: ${BOT_TOKEN}
+      ADMIN_TELEGRAM_ID: ${ADMIN_TELEGRAM_ID}
       NODE_ENV: production
       TZ: Asia/Tashkent
     networks:
