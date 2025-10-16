@@ -3,6 +3,9 @@ import {formatTimes, parseTimes, validateTimes} from '../utils/timeUtils';
 import {createSchedule, deleteSchedule, getActiveSchedule, updateSchedule} from '../services/scheduleService';
 import {registerCronTask, unregisterCronTasks} from '../scheduler/cronScheduler';
 import {getBotInstance} from '../lib/bot';
+import {isAdmin} from '../middleware/isAdmin';
+import {createTemplate, deleteTemplate, getAllTemplates} from '../services/templateService';
+import {config} from '../config';
 
 export function registerCommands(bot: Bot) {
     bot.command('setreminder', handleSetReminder);
@@ -10,6 +13,11 @@ export function registerCommands(bot: Bot) {
     bot.command('editreminder', handleEditReminder);
     bot.command('deletereminder', handleDeleteReminder);
     bot.command('help', handleHelp);
+    
+    bot.command('addreminder', isAdmin, handleAddReminder);
+    bot.command('addreward', isAdmin, handleAddReward);
+    bot.command('deletemessage', isAdmin, handleDeleteMessage);
+    bot.command('listmessages', isAdmin, handleListMessages);
 }
 
 async function handleSetReminder(ctx: Context) {
@@ -217,8 +225,10 @@ async function handleDeleteReminder(ctx: Context) {
 }
 
 async function handleHelp(ctx: Context) {
-    await ctx.reply(
-        '📚 Доступные команды:\n\n' +
+    const telegramId = ctx.from?.id;
+    const isAdminUser = telegramId && config.adminTelegramId && BigInt(telegramId) === config.adminTelegramId;
+
+    let helpText = '📚 Доступные команды:\n\n' +
         '🔹 /setreminder <время> - Создать расписание напоминаний\n' +
         '   Пример: /setreminder 09:00,14:00,21:00\n\n' +
         '🔹 /myreminders - Показать текущее расписание\n\n' +
@@ -227,6 +237,142 @@ async function handleHelp(ctx: Context) {
         '🔹 /deletereminder - Удалить расписание\n\n' +
         '🔹 /help - Показать эту справку\n\n' +
         '💡 Формат времени: HH:MM (24-часовой)\n' +
-        '💡 Несколько времен указывайте через запятую'
-    );
+        '💡 Несколько времен указывайте через запятую';
+
+    if (isAdminUser) {
+        helpText += '\n\n' +
+            '👑 Административные команды:\n\n' +
+            '🔸 /addreminder <текст> - Добавить шаблон напоминания\n' +
+            '   Пример: /addreminder Не забудьте принять таблетки!\n\n' +
+            '🔸 /addreward <текст> - Добавить шаблон награды\n' +
+            '   Пример: /addreward Отлично! Продолжайте в том же духе!\n\n' +
+            '🔸 /deletemessage <id> - Удалить шаблон по ID\n' +
+            '   Пример: /deletemessage abc-123-def\n\n' +
+            '🔸 /listmessages [type] - Показать все шаблоны\n' +
+            '   Пример: /listmessages reminder';
+    }
+
+    await ctx.reply(helpText);
+}
+
+async function handleAddReminder(ctx: Context) {
+    const input = ctx.match;
+
+    if (!input || input.toString().trim().length === 0) {
+        return ctx.reply(
+            '⚠️ Использование: /addreminder <текст>\n\n' +
+            'Пример: /addreminder Не забудьте принять таблетки!'
+        );
+    }
+
+    try {
+        const template = await createTemplate('reminder', input.toString());
+        await ctx.reply(
+            `✅ Шаблон напоминания создан!\n\n` +
+            `🆔 ID: ${template.id}\n` +
+            `📝 Содержимое: ${template.content}`
+        );
+    } catch (error) {
+        console.error('Ошибка при создании шаблона напоминания:', error);
+        const errorMessage = error instanceof Error ? error.message : 'Неизвестная ошибка';
+        await ctx.reply(`❌ Ошибка: ${errorMessage}`);
+    }
+}
+
+async function handleAddReward(ctx: Context) {
+    const input = ctx.match;
+
+    if (!input || input.toString().trim().length === 0) {
+        return ctx.reply(
+            '⚠️ Использование: /addreward <текст>\n\n' +
+            'Пример: /addreward Отлично! Продолжайте в том же духе!'
+        );
+    }
+
+    try {
+        const template = await createTemplate('reward', input.toString());
+        await ctx.reply(
+            `✅ Шаблон награды создан!\n\n` +
+            `🆔 ID: ${template.id}\n` +
+            `📝 Содержимое: ${template.content}`
+        );
+    } catch (error) {
+        console.error('Ошибка при создании шаблона награды:', error);
+        const errorMessage = error instanceof Error ? error.message : 'Неизвестная ошибка';
+        await ctx.reply(`❌ Ошибка: ${errorMessage}`);
+    }
+}
+
+async function handleDeleteMessage(ctx: Context) {
+    const input = ctx.match;
+
+    if (!input || input.toString().trim().length === 0) {
+        return ctx.reply(
+            '⚠️ Использование: /deletemessage <id>\n\n' +
+            'Пример: /deletemessage abc-123-def\n\n' +
+            'Используйте /listmessages для просмотра ID шаблонов'
+        );
+    }
+
+    try {
+        const template = await deleteTemplate(input.toString().trim());
+        await ctx.reply(
+            `✅ Шаблон удален!\n\n` +
+            `🆔 ID: ${template.id}\n` +
+            `📝 Содержимое: ${template.content}`
+        );
+    } catch (error) {
+        console.error('Ошибка при удалении шаблона:', error);
+        const errorMessage = error instanceof Error ? error.message : 'Неизвестная ошибка';
+        await ctx.reply(`❌ Ошибка: ${errorMessage}`);
+    }
+}
+
+async function handleListMessages(ctx: Context) {
+    const input = ctx.match?.toString().trim();
+    let type: 'reminder' | 'reward' | undefined;
+
+    if (input === 'reminder' || input === 'reward') {
+        type = input;
+    }
+
+    try {
+        const templates = await getAllTemplates(type);
+
+        if (templates.length === 0) {
+            return ctx.reply('📭 Шаблоны не найдены');
+        }
+
+        const reminderTemplates = templates.filter(t => t.type === 'reminder');
+        const rewardTemplates = templates.filter(t => t.type === 'reward');
+
+        let message = '📋 Список шаблонов:\n\n';
+
+        if (reminderTemplates.length > 0) {
+            message += '⏰ Напоминания:\n';
+            reminderTemplates.forEach((t, index) => {
+                const status = t.isActive ? '✅' : '❌';
+                const preview = t.content.length > 50 ? t.content.substring(0, 50) + '...' : t.content;
+                message += `${index + 1}. ${status} ${preview}\n`;
+                message += `   🆔 ${t.id}\n\n`;
+            });
+        }
+
+        if (rewardTemplates.length > 0) {
+            message += '🎁 Награды:\n';
+            rewardTemplates.forEach((t, index) => {
+                const status = t.isActive ? '✅' : '❌';
+                const preview = t.content.length > 50 ? t.content.substring(0, 50) + '...' : t.content;
+                message += `${index + 1}. ${status} ${preview}\n`;
+                message += `   🆔 ${t.id}\n\n`;
+            });
+        }
+
+        message += `\n📊 Всего: ${templates.length} шаблонов`;
+
+        await ctx.reply(message);
+    } catch (error) {
+        console.error('Ошибка при получении списка шаблонов:', error);
+        await ctx.reply('❌ Произошла ошибка при получении списка шаблонов');
+    }
 }
