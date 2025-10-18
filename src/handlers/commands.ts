@@ -14,11 +14,13 @@ export function registerCommands(bot: Bot) {
     bot.command('deletereminder', handleDeleteReminder);
     bot.command('help', handleHelp);
     bot.command('whoami', handleWhoami);
-    
+
     bot.command('addreminder', isAdmin, handleAddReminder);
     bot.command('addreward', isAdmin, handleAddReward);
     bot.command('deletemessage', isAdmin, handleDeleteMessage);
     bot.command('listmessages', isAdmin, handleListMessages);
+    bot.command('setstatus', isAdmin, handleSetStatus);
+    bot.command('clearstatus', isAdmin, handleClearStatus);
 }
 
 async function handleSetReminder(ctx: Context) {
@@ -251,7 +253,11 @@ async function handleHelp(ctx: Context) {
             '🔸 /deletemessage <id> - Удалить шаблон по ID\n' +
             '   Пример: /deletemessage abc-123-def\n\n' +
             '🔸 /listmessages [type] - Показать все шаблоны\n' +
-            '   Пример: /listmessages reminder';
+            '   Пример: /listmessages reminder\n\n' +
+            '🔸 /setstatus <telegramId> <статус> - Установить статус пользователю\n' +
+            '   Пример: /setstatus 1248835061 Самая милая кошечка ❤️\n\n' +
+            '🔸 /clearstatus <telegramId> - Удалить статус пользователя\n' +
+            '   Пример: /clearstatus 1248835061';
     }
 
     await ctx.reply(helpText);
@@ -386,24 +392,129 @@ async function handleWhoami(ctx: Context) {
         return ctx.reply('❌ Не удалось получить информацию о пользователе');
     }
 
-    let message = `👤 Ваша информация:\n\n`;
-    message += `🆔 Telegram ID: ${telegramId}\n\n`;
+    try {
+        const {prisma} = await import('../lib/prisma');
+        const user = await prisma.user.findUnique({where: {telegramId: BigInt(telegramId)}});
 
-    if (!config.adminTelegramId) {
-        message += '⚠️ Административные функции не настроены\n';
-        message += 'ADMIN_TELEGRAM_ID не установлен в конфигурации';
-    } else if (BigInt(telegramId) === config.adminTelegramId) {
-        message += '👑 Статус: Администратор\n\n';
-        message += 'У вас есть доступ к административным командам:\n';
-        message += '• /addreminder - добавить шаблон напоминания\n';
-        message += '• /addreward - добавить шаблон награды\n';
-        message += '• /deletemessage - удалить шаблон\n';
-        message += '• /listmessages - показать все шаблоны';
-    } else {
-        message += '👤 Статус: Обычный пользователь\n\n';
-        message += 'Вы можете использовать основные команды бота.\n';
-        message += 'Используйте /help для просмотра доступных команд.';
+        let message = `👤 Ваша информация:\n\n`;
+        message += `🆔 Telegram ID: ${telegramId}\n\n`;
+
+        if (user?.customStatus) {
+            message += `✨ Статус: ${user.customStatus}\n\n`;
+        } else if (!config.adminTelegramId) {
+            message += '⚠️ Административные функции не настроены\n';
+            message += 'ADMIN_TELEGRAM_ID не установлен в конфигурации';
+        } else if (BigInt(telegramId) === config.adminTelegramId) {
+            message += '👑 Статус: Администратор\n\n';
+        } else {
+            message += '👤 Статус: Обычный пользователь\n\n';
+        }
+
+        if (config.adminTelegramId && BigInt(telegramId) === config.adminTelegramId) {
+            message += 'У вас есть доступ к административным командам:\n';
+            message += '• /addreminder - добавить шаблон напоминания\n';
+            message += '• /addreward - добавить шаблон награды\n';
+            message += '• /deletemessage - удалить шаблон\n';
+            message += '• /listmessages - показать все шаблоны\n';
+            message += '• /setstatus - установить статус пользователю\n';
+            message += '• /clearstatus - удалить статус пользователя';
+        } else if (!user?.customStatus) {
+            message += 'Вы можете использовать основные команды бота.\n';
+            message += 'Используйте /help для просмотра доступных команд.';
+        }
+
+        await ctx.reply(message);
+    } catch (error) {
+        console.error('Ошибка при получении информации о пользователе:', error);
+        await ctx.reply('❌ Произошла ошибка при получении информации');
+    }
+}
+
+async function handleSetStatus(ctx: Context) {
+    const input = ctx.match?.toString().trim();
+
+    if (!input) {
+        return ctx.reply(
+            '⚠️ Использование: /setstatus <telegramId> <статус>\n\n' +
+            'Пример: /setstatus 1248835061 Самая милая кошечка ❤️'
+        );
     }
 
-    await ctx.reply(message);
+    const parts = input.split(' ');
+    if (parts.length < 2) {
+        return ctx.reply(
+            '⚠️ Укажите Telegram ID и статус\n\n' +
+            'Пример: /setstatus 1248835061 Самая милая кошечка ❤️'
+        );
+    }
+
+    const targetTelegramId = parts[0];
+    const status = parts.slice(1).join(' ');
+
+    if (!/^\d+$/.test(targetTelegramId)) {
+        return ctx.reply('❌ Telegram ID должен содержать только цифры');
+    }
+
+    try {
+        const {prisma} = await import('../lib/prisma');
+        const user = await prisma.user.findUnique({
+            where: {telegramId: BigInt(targetTelegramId)}
+        });
+
+        if (!user) {
+            return ctx.reply(`❌ Пользователь с ID ${targetTelegramId} не найден`);
+        }
+
+        await prisma.user.update({
+            where: {telegramId: BigInt(targetTelegramId)},
+            data: {customStatus: status}
+        });
+
+        await ctx.reply(`✅ Статус установлен для пользователя ${targetTelegramId}\n\n📝 Статус: ${status}`);
+    } catch (error) {
+        console.error('Ошибка при установке статуса:', error);
+        await ctx.reply('❌ Произошла ошибка при установке статуса');
+    }
+}
+
+async function handleClearStatus(ctx: Context) {
+    const input = ctx.match?.toString().trim();
+
+    if (!input) {
+        return ctx.reply(
+            '⚠️ Использование: /clearstatus <telegramId>\n\n' +
+            'Пример: /clearstatus 1248835061'
+        );
+    }
+
+    const targetTelegramId = input;
+
+    if (!/^\d+$/.test(targetTelegramId)) {
+        return ctx.reply('❌ Telegram ID должен содержать только цифры');
+    }
+
+    try {
+        const {prisma} = await import('../lib/prisma');
+        const user = await prisma.user.findUnique({
+            where: {telegramId: BigInt(targetTelegramId)}
+        });
+
+        if (!user) {
+            return ctx.reply(`❌ Пользователь с ID ${targetTelegramId} не найден`);
+        }
+
+        if (!user.customStatus) {
+            return ctx.reply(`⚠️ У пользователя ${targetTelegramId} нет кастомного статуса`);
+        }
+
+        await prisma.user.update({
+            where: {telegramId: BigInt(targetTelegramId)},
+            data: {customStatus: null}
+        });
+
+        await ctx.reply(`✅ Статус удален для пользователя ${targetTelegramId}`);
+    } catch (error) {
+        console.error('Ошибка при удалении статуса:', error);
+        await ctx.reply('❌ Произошла ошибка при удалении статуса');
+    }
 }

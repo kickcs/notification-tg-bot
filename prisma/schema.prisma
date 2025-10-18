@@ -8,14 +8,15 @@ datasource db {
 }
 
 model User {
-  id        String   @id @default(uuid())
-  telegramId BigInt  @unique
-  username  String?
-  firstName String?
-  lastName  String?
-  chatId    BigInt?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id           String   @id @default(uuid())
+  telegramId   BigInt   @unique
+  username     String?
+  firstName    String?
+  lastName     String?
+  chatId       BigInt?
+  customStatus String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
   
   notifications Notification[]
   schedules     Schedule[]
