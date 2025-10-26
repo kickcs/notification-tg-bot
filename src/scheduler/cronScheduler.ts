@@ -3,7 +3,7 @@ import { Bot, InlineKeyboard } from 'grammy';
 import { getAllActiveSchedules } from '../services/scheduleService';
 import { createReminder, incrementRetryCount, markReminderAsMissed, updateReminderMessageId } from '../services/reminderService';
 import { getRandomTemplate } from '../services/templateService';
-import { timeToCron } from '../utils/timeUtils';
+import { timeToCron, getCurrentTimeFormatted } from '../utils/timeUtils';
 
 const tasks = new Map<string, cron.ScheduledTask>();
 const retryTimeouts = new Map<string, NodeJS.Timeout>();
@@ -64,7 +64,9 @@ export function unregisterCronTasks(scheduleId: string) {
 async function sendReminder(bot: Bot, scheduleId: string, userId: string, chatId: bigint) {
   try {
     const reminder = await createReminder(scheduleId);
-    const message = await getRandomTemplate('reminder');
+    const templateMessage = await getRandomTemplate('reminder');
+    const currentTime = getCurrentTimeFormatted();
+    const message = `[${currentTime}] ${templateMessage}`;
     
     const keyboard = new InlineKeyboard().text('✅ Подтвердить', `confirm_reminder:${reminder.id}`);
     
@@ -76,7 +78,7 @@ async function sendReminder(bot: Bot, scheduleId: string, userId: string, chatId
     
     scheduleRetry(bot, reminder.id, userId, chatId, 0);
     
-    console.log(`📨 Отправлено напоминание ${reminder.id} пользователю ${userId}`);
+    console.log(`📨 Отправлено напоминание ${reminder.id} пользователю ${userId} в ${currentTime}`);
   } catch (error) {
     console.error('❌ Ошибка при отправке напоминания:', error);
   }
@@ -111,10 +113,12 @@ function scheduleRetry(bot: Bot, reminderId: string, userId: string, chatId: big
         }
       }
       
-      const message = await getRandomTemplate('reminder');
+      const templateMessage = await getRandomTemplate('reminder');
+      const currentTime = getCurrentTimeFormatted();
+      const message = `🔔 Повторное напоминание:\n\n[${currentTime}] ${templateMessage}`;
       const keyboard = new InlineKeyboard().text('✅ Подтвердить', `confirm_reminder:${reminderId}`);
       
-      const sentMessage = await bot.api.sendMessage(chatId.toString(), `🔔 Повторное напоминание:\n\n${message}`, {
+      const sentMessage = await bot.api.sendMessage(chatId.toString(), message, {
         reply_markup: keyboard,
       });
       
@@ -122,7 +126,7 @@ function scheduleRetry(bot: Bot, reminderId: string, userId: string, chatId: big
       
       scheduleRetry(bot, reminderId, userId, chatId, reminder.retryCount);
       
-      console.log(`🔁 Отправлено повторное напоминание ${reminderId} (попытка ${reminder.retryCount})`);
+      console.log(`🔁 Отправлено повторное напоминание ${reminderId} (попытка ${reminder.retryCount}) в ${currentTime}`);
     } catch (error) {
       console.error('❌ Ошибка при повторной отправке напоминания:', error);
     }
