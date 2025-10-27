@@ -13,7 +13,7 @@ interface QuizJsonFormat {
 export async function importQuizFromJson(jsonData: QuizJsonFormat, userId: bigint) {
   const quizName = jsonData.тест;
   
-  await createQuiz(quizName, `Импортированный квиз`, userId);
+  await createQuiz(quizName, `Импортированный квиз`);
 
   for (const questionData of jsonData.вопросы) {
     const correctAnswerIndex = questionData.ответы.indexOf(questionData.правильный_ответ);
