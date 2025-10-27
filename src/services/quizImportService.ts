@@ -4,9 +4,9 @@ interface QuizJsonFormat {
   test_name: string;
   questions: Array<{
     question: string;
-    options_count: number;
-    options: string[];
-    correct_answer: string;
+    number_of_answers: number;
+    answers: string[];
+    correct_answer: number;
   }>;
 }
 
@@ -24,15 +24,19 @@ export async function importQuizFromJson(jsonData: QuizJsonFormat, userId: bigin
   await createQuiz(quizName, `Импортированный квиз`);
 
   for (const questionData of jsonData.questions) {
-    const correctAnswerIndex = questionData.options.indexOf(questionData.correct_answer);
-    
-    if (correctAnswerIndex === -1) {
-      throw new Error(`Правильный ответ "${questionData.correct_answer}" не найден в списке вариантов для вопроса: ${questionData.question}`);
+    if (!Array.isArray(questionData.answers) || questionData.answers.length === 0) {
+      throw new Error(`Вопрос "${questionData.question}" не содержит вариантов ответа`);
     }
 
-    const options = questionData.options.map((answer, index) => ({
+    if (typeof questionData.correct_answer !== 'number' || 
+        questionData.correct_answer < 0 || 
+        questionData.correct_answer >= questionData.answers.length) {
+      throw new Error(`Неверный индекс правильного ответа (${questionData.correct_answer}) для вопроса: ${questionData.question}`);
+    }
+
+    const options = questionData.answers.map((answer, index) => ({
       text: answer,
-      isCorrect: index === correctAnswerIndex,
+      isCorrect: index === questionData.correct_answer,
     }));
 
     await createQuestion(quizName, questionData.question, options);

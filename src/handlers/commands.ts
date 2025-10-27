@@ -874,13 +874,14 @@ async function handleImportQuizCommand(ctx: Context) {
         '  "questions": [\n' +
         '    {\n' +
         '      "question": "Question text",\n' +
-        '      "options_count": 4,\n' +
-        '      "options": ["Option 1", "Option 2", "Option 3", "Option 4"],\n' +
-        '      "correct_answer": "Option 2"\n' +
+        '      "number_of_answers": 4,\n' +
+        '      "answers": ["Option 1", "Option 2", "Option 3", "Option 4"],\n' +
+        '      "correct_answer": 1\n' +
         '    }\n' +
         '  ]\n' +
         '}\n' +
-        '```',
+        '```\n' +
+        'correct_answer - индекс правильного ответа (0-3)',
         { parse_mode: 'Markdown' }
     );
 }
