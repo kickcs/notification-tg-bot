@@ -112,16 +112,16 @@ async function handleQuizAnswer(ctx: Context) {
   const isCorrect = selectedOption.isCorrect;
   const correctOption = currentQuestion.options.find(opt => opt.isCorrect);
 
+  await ctx.answerCallbackQuery();
+
   if (isCorrect) {
     updateSession(BigInt(sessionUserId), BigInt(sessionChatId), {
       correctCount: session.correctCount + 1,
     });
-    await ctx.answerCallbackQuery({ text: '✅ Правильно!' });
   } else {
     updateSession(BigInt(sessionUserId), BigInt(sessionChatId), {
       incorrectCount: session.incorrectCount + 1,
     });
-    await ctx.answerCallbackQuery({ text: '❌ Неправильно' });
   }
 
   const updatedSession = getSession(BigInt(sessionUserId), BigInt(sessionChatId));
@@ -173,19 +173,22 @@ async function editToNextQuestion(ctx: Context, userId: bigint, chatId: bigint, 
     }]),
   };
 
+  let messageText = '';
+  
+  if (wasCorrect) {
+    messageText = `✅ Правильно!\n\n`;
+  } else {
+    messageText = `❌ Неправильно!\nПравильный ответ: ${correctAnswer}\n\n`;
+  }
+  
+  messageText += `📝 Вопрос ${questionNumber}/${totalQuestions}\n\n${question.questionText}`;
+
   try {
-    await ctx.editMessageText(
-      `📝 Вопрос ${questionNumber}/${totalQuestions}\n\n` +
-      `${question.questionText}`
-    );
+    await ctx.editMessageText(messageText);
     await ctx.editMessageReplyMarkup({ reply_markup: keyboard });
   } catch (error) {
     console.error('Не удалось отредактировать сообщение:', error);
-    await ctx.reply(
-      `📝 Вопрос ${questionNumber}/${totalQuestions}\n\n` +
-      `${question.questionText}`,
-      {reply_markup: keyboard}
-    );
+    await ctx.reply(messageText, {reply_markup: keyboard});
   }
 }
 
