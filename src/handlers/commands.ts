@@ -17,6 +17,7 @@ import {
 } from '../services/quizService';
 import {createSession, deleteSession, getSession, hasActiveSession,} from '../services/quizSessionManager';
 import {quizListMenu, adminMainMenu} from '../menus/quizMenus';
+import {importQuizFromJson} from '../services/quizImportService';
 
 export function registerCommands(bot: Bot<MyContext>) {
     bot.command('setreminder', handleSetReminder);
@@ -39,6 +40,8 @@ export function registerCommands(bot: Bot<MyContext>) {
     bot.command('addquestion', isAdmin, handleAddQuestion);
     bot.command('listquestions', isAdmin, handleListQuestions);
     bot.command('deletequestion', isAdmin, handleDeleteQuestion);
+    bot.command('importquiz', isAdmin, handleImportQuizCommand);
+    bot.on('message:document', handleImportQuizDocument);
     bot.command('startquiz', handleStartQuiz);
     bot.command('cancelquiz', handleCancelQuiz);
     bot.command('adminpanel', isAdmin, handleAdminPanel);
@@ -849,4 +852,77 @@ async function handleCancelQuiz(ctx: Context) {
 
     deleteSession(BigInt(telegramId), BigInt(chatId));
     await ctx.reply('❌ Квиз отменен. Вы можете начать новый с помощью /startquiz');
+}
+
+const waitingForQuizImport = new Set<number>();
+
+async function handleImportQuizCommand(ctx: Context) {
+    const telegramId = ctx.from?.id;
+
+    if (!telegramId) {
+        return ctx.reply('❌ Не удалось получить информацию о пользователе');
+    }
+
+    waitingForQuizImport.add(telegramId);
+
+    await ctx.reply(
+        '📤 Отправьте JSON файл с квизом\n\n' +
+        'Формат:\n' +
+        '```json\n' +
+        '{\n' +
+        '  "тест": "Название квиза",\n' +
+        '  "вопросы": [\n' +
+        '    {\n' +
+        '      "вопрос": "Текст вопроса",\n' +
+        '      "количество_ответов": 4,\n' +
+        '      "ответы": ["Вариант 1", "Вариант 2", "Вариант 3", "Вариант 4"],\n' +
+        '      "правильный_ответ": "Вариант 2"\n' +
+        '    }\n' +
+        '  ]\n' +
+        '}\n' +
+        '```',
+        { parse_mode: 'Markdown' }
+    );
+}
+
+async function handleImportQuizDocument(ctx: Context) {
+    const telegramId = ctx.from?.id;
+
+    if (!telegramId || !waitingForQuizImport.has(telegramId)) {
+        return;
+    }
+
+    waitingForQuizImport.delete(telegramId);
+
+    const document = ctx.message?.document;
+    
+    if (!document) {
+        return ctx.reply('❌ Файл не получен');
+    }
+
+    if (!document.file_name?.endsWith('.json')) {
+        return ctx.reply('❌ Файл должен быть в формате JSON');
+    }
+
+    try {
+        const file = await ctx.api.getFile(document.file_id);
+        const fileUrl = `https://api.telegram.org/file/bot${config.botToken}/${file.file_path}`;
+        
+        const response = await fetch(fileUrl);
+        const jsonText = await response.text();
+        const jsonData = JSON.parse(jsonText);
+
+        const result = await importQuizFromJson(jsonData, BigInt(telegramId));
+
+        await ctx.reply(
+            `✅ Квиз успешно импортирован!\n\n` +
+            `📝 Название: ${result.quizName}\n` +
+            `📊 Вопросов: ${result.questionsCount}\n\n` +
+            `Используйте /startquiz ${result.quizName} для запуска`
+        );
+    } catch (error) {
+        console.error('Ошибка при импорте квиза:', error);
+        const errorMessage = error instanceof Error ? error.message : 'Неизвестная ошибка';
+        await ctx.reply(`❌ Ошибка при импорте: ${errorMessage}`);
+    }
 }
