@@ -870,13 +870,13 @@ async function handleImportQuizCommand(ctx: Context) {
         'Формат:\n' +
         '```json\n' +
         '{\n' +
-        '  "тест": "Название квиза",\n' +
-        '  "вопросы": [\n' +
+        '  "test_name": "Quiz Name",\n' +
+        '  "questions": [\n' +
         '    {\n' +
-        '      "вопрос": "Текст вопроса",\n' +
-        '      "количество_ответов": 4,\n' +
-        '      "ответы": ["Вариант 1", "Вариант 2", "Вариант 3", "Вариант 4"],\n' +
-        '      "правильный_ответ": "Вариант 2"\n' +
+        '      "question": "Question text",\n' +
+        '      "options_count": 4,\n' +
+        '      "options": ["Option 1", "Option 2", "Option 3", "Option 4"],\n' +
+        '      "correct_answer": "Option 2"\n' +
         '    }\n' +
         '  ]\n' +
         '}\n' +
