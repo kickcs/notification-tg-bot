@@ -11,6 +11,18 @@ interface QuizJsonFormat {
 }
 
 export async function importQuizFromJson(jsonData: QuizJsonFormat, userId: bigint) {
+  if (!jsonData.тест) {
+    throw new Error('Поле "тест" не найдено в JSON файле');
+  }
+
+  if (!jsonData.вопросы || !Array.isArray(jsonData.вопросы)) {
+    throw new Error('Поле "вопросы" не найдено или не является массивом');
+  }
+
+  if (jsonData.вопросы.length === 0) {
+    throw new Error('Квиз должен содержать хотя бы один вопрос');
+  }
+
   const quizName = jsonData.тест;
   
   await createQuiz(quizName, `Импортированный квиз`);

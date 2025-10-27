@@ -912,6 +912,8 @@ async function handleImportQuizDocument(ctx: Context) {
         const jsonText = await response.text();
         const jsonData = JSON.parse(jsonText);
 
+        console.log('Parsed JSON data:', JSON.stringify(jsonData, null, 2));
+
         const result = await importQuizFromJson(jsonData, BigInt(telegramId));
 
         await ctx.reply(
