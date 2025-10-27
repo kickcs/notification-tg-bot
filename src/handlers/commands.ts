@@ -754,6 +754,7 @@ export async function startQuizWithQuestions(ctx: Context, quizName: string, que
         currentIndex: 0,
         correctCount: 0,
         incorrectCount: 0,
+        answers: [],
     });
 
     await sendQuizQuestion(ctx, BigInt(telegramId), BigInt(chatId));
@@ -798,6 +799,7 @@ async function handleStartQuiz(ctx: Context) {
             currentIndex: 0,
             correctCount: 0,
             incorrectCount: 0,
+            answers: [],
         });
 
         await sendQuizQuestion(ctx, BigInt(telegramId), BigInt(chatId));

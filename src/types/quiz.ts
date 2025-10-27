@@ -10,6 +10,13 @@ export interface QuizQuestionData {
   options: QuizOption[];
 }
 
+export interface QuizAnswer {
+  questionText: string;
+  selectedOption: string;
+  correctOption: string;
+  isCorrect: boolean;
+}
+
 export interface QuizSession {
   userId: bigint;
   chatId: bigint;
@@ -18,4 +25,5 @@ export interface QuizSession {
   currentIndex: number;
   correctCount: number;
   incorrectCount: number;
+  answers: QuizAnswer[];
 }

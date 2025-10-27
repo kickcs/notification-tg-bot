@@ -4,6 +4,8 @@ import { getRandomTemplate } from '../services/templateService';
 import { cancelRetry } from '../scheduler/cronScheduler';
 import { getSession, updateSession, deleteSession } from '../services/quizSessionManager';
 import { MyContext } from '../types/context';
+import { config } from '../config';
+import { QuizAnswer } from '../types/quiz';
 
 export function registerCallbacks(bot: Bot<MyContext>) {
   bot.callbackQuery(/^confirm_reminder:(.+)$/, handleConfirmReminder);
@@ -114,13 +116,22 @@ async function handleQuizAnswer(ctx: Context) {
 
   await ctx.answerCallbackQuery();
 
+  const answer = {
+    questionText: currentQuestion.questionText,
+    selectedOption: selectedOption.text,
+    correctOption: correctOption?.text || '',
+    isCorrect,
+  };
+
   if (isCorrect) {
     updateSession(BigInt(sessionUserId), BigInt(sessionChatId), {
       correctCount: session.correctCount + 1,
+      answers: [...session.answers, answer],
     });
   } else {
     updateSession(BigInt(sessionUserId), BigInt(sessionChatId), {
       incorrectCount: session.incorrectCount + 1,
+      answers: [...session.answers, answer],
     });
   }
 
@@ -220,10 +231,12 @@ async function sendNextQuestion(ctx: Context, userId: bigint, chatId: bigint) {
 }
 
 async function showFinalStatistics(ctx: Context, session: {
+  userId: bigint;
   quizName: string;
   questions: unknown[];
   correctCount: number;
   incorrectCount: number;
+  answers: QuizAnswer[];
 }) {
   const totalQuestions = session.questions.length;
   const percentage = Math.round((session.correctCount / totalQuestions) * 100);
@@ -247,6 +260,49 @@ async function showFinalStatistics(ctx: Context, session: {
   }
 
   await ctx.reply(message);
+
+  if (config.adminTelegramId) {
+    await sendResultsToAdmin(ctx, session);
+  }
+}
+
+async function sendResultsToAdmin(ctx: Context, session: {
+  userId: bigint;
+  quizName: string;
+  correctCount: number;
+  incorrectCount: number;
+  answers: QuizAnswer[];
+}) {
+  const user = ctx.from;
+  const userName = user?.first_name || 'Неизвестный';
+  const userUsername = user?.username ? `@${user.username}` : '';
+  const totalQuestions = session.answers.length;
+  const percentage = Math.round((session.correctCount / totalQuestions) * 100);
+
+  let adminMessage = `📊 Результаты квиза\n\n`;
+  adminMessage += `👤 Пользователь: ${userName} ${userUsername}\n`;
+  adminMessage += `🆔 ID: ${session.userId}\n`;
+  adminMessage += `📝 Квиз: ${session.quizName}\n\n`;
+  adminMessage += `✅ Правильно: ${session.correctCount}\n`;
+  adminMessage += `❌ Неправильно: ${session.incorrectCount}\n`;
+  adminMessage += `📊 Результат: ${percentage}%\n\n`;
+  adminMessage += `📋 Ответы:\n\n`;
+
+  session.answers.forEach((answer, index) => {
+    const icon = answer.isCorrect ? '✅' : '❌';
+    adminMessage += `${index + 1}. ${answer.questionText}\n`;
+    adminMessage += `   ${icon} Выбрано: ${answer.selectedOption}\n`;
+    if (!answer.isCorrect) {
+      adminMessage += `   ✓ Правильно: ${answer.correctOption}\n`;
+    }
+    adminMessage += `\n`;
+  });
+
+  try {
+    await ctx.api.sendMessage(Number(config.adminTelegramId), adminMessage);
+  } catch (error) {
+    console.error('Не удалось отправить результаты администратору:', error);
+  }
 }
 
 async function handleAddQuestionButton(ctx: MyContext) {
