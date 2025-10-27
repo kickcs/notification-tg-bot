@@ -128,6 +128,9 @@ export async function getAllQuestionsFromQuiz(quizName: string) {
     include: {
       options: true,
     },
+    orderBy: {
+      createdAt: 'asc',
+    },
   });
   
   return questions.map((q: {id: string; questionText: string; options: Array<{id: string; optionText: string; isCorrect: boolean}>}) => ({
@@ -138,7 +141,7 @@ export async function getAllQuestionsFromQuiz(quizName: string) {
       text: o.optionText,
       isCorrect: o.isCorrect,
     })),
-  })).sort(() => Math.random() - 0.5);
+  }));
 }
 
 export async function deleteQuestion(questionId: string) {

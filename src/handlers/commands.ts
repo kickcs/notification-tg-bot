@@ -746,11 +746,6 @@ export async function startQuizWithQuestions(ctx: Context, quizName: string, que
         }));
     }
 
-    for (let i = questionsData.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [questionsData[i], questionsData[j]] = [questionsData[j], questionsData[i]];
-    }
-
     createSession({
         userId: BigInt(telegramId),
         chatId: BigInt(chatId),
