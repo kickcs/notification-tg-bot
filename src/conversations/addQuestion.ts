@@ -53,13 +53,63 @@ export async function addQuestionConversation(conversation: Conversation<MyConte
     return;
   }
 
+  await ctx.api.editMessageText(
+    ctx.chat!.id,
+    initialMsg.message_id,
+    `📝 Сколько вариантов ответа? (2-4)\n\nВопрос: ${questionText}`
+  );
+
+  let optionsCount: number | null = null;
+
+  while (optionsCount === null) {
+    const countCtx = await conversation.waitFor('message:text');
+    
+    try {
+      await ctx.api.deleteMessage(ctx.chat!.id, countCtx.message!.message_id);
+    } catch (error) {
+      console.error('Не удалось удалить сообщение:', error);
+    }
+    
+    if (countCtx.message?.text === '/cancel') {
+      await ctx.api.editMessageText(
+        ctx.chat!.id,
+        initialMsg.message_id,
+        '❌ Добавление вопроса отменено'
+      );
+      return;
+    }
+
+    const input = countCtx.message?.text;
+    if (!input) {
+      await ctx.api.editMessageText(
+        ctx.chat!.id,
+        initialMsg.message_id,
+        `📝 Сколько вариантов ответа? (2-4)\n\nВопрос: ${questionText}\n\n❌ Введите число от 2 до 4:`
+      );
+      continue;
+    }
+
+    const parsed = parseInt(input);
+    
+    if (isNaN(parsed) || parsed < 2 || parsed > 4) {
+      await ctx.api.editMessageText(
+        ctx.chat!.id,
+        initialMsg.message_id,
+        `📝 Сколько вариантов ответа? (2-4)\n\nВопрос: ${questionText}\n\n❌ Введите число от 2 до 4:`
+      );
+      continue;
+    }
+
+    optionsCount = parsed;
+  }
+
   const options: string[] = [];
   
-  for (let i = 1; i <= 4; i++) {
+  for (let i = 1; i <= optionsCount; i++) {
     await ctx.api.editMessageText(
       ctx.chat!.id,
       initialMsg.message_id,
-      `📝 Отправьте вариант ответа ${i} (всего нужно 4 варианта)\n\n` +
+      `📝 Отправьте вариант ответа ${i} (всего ${optionsCount})\n\n` +
       `Вопрос: ${questionText}`
     );
     
@@ -97,7 +147,7 @@ export async function addQuestionConversation(conversation: Conversation<MyConte
   options.forEach((opt, i) => {
     message += `${i + 1}. ${opt}\n`;
   });
-  message += '\n\n📝 Введите номер правильного ответа (1-4)';
+  message += `\n\n📝 Введите номер правильного ответа (1-${optionsCount})`;
 
   await ctx.api.editMessageText(
     ctx.chat!.id,
@@ -137,11 +187,11 @@ export async function addQuestionConversation(conversation: Conversation<MyConte
 
     const parsed = parseInt(input);
     
-    if (isNaN(parsed) || parsed < 1 || parsed > 4) {
+    if (isNaN(parsed) || parsed < 1 || parsed > optionsCount) {
       await ctx.api.editMessageText(
         ctx.chat!.id,
         initialMsg.message_id,
-        message + '\n\n❌ Введите число от 1 до 4:'
+        message + `\n\n❌ Введите число от 1 до ${optionsCount}:`
       );
       continue;
     }

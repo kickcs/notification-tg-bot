@@ -68,8 +68,8 @@ export async function createQuestion(
     throw new Error(`Квиз "${quizName}" не найден`);
   }
   
-  if (options.length !== 4) {
-    throw new Error('Вопрос должен содержать ровно 4 варианта ответа');
+  if (options.length < 2 || options.length > 4) {
+    throw new Error('Вопрос должен содержать от 2 до 4 вариантов ответа');
   }
   
   const correctAnswers = options.filter(o => o.isCorrect);
