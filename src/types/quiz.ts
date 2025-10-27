@@ -19,11 +19,3 @@ export interface QuizSession {
   correctCount: number;
   incorrectCount: number;
 }
-
-export interface QuestionAdditionState {
-  userId: bigint;
-  quizName: string;
-  questionText?: string;
-  options: string[];
-  step: 'question' | 'options' | 'correct_answer';
-}

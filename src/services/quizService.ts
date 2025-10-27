@@ -130,10 +130,10 @@ export async function getAllQuestionsFromQuiz(quizName: string) {
     },
   });
   
-  return questions.map(q => ({
+  return questions.map((q: {id: string; questionText: string; options: Array<{id: string; optionText: string; isCorrect: boolean}>}) => ({
     id: q.id,
     questionText: q.questionText,
-    options: q.options.map(o => ({
+    options: q.options.map((o: {id: string; optionText: string; isCorrect: boolean}) => ({
       id: o.id,
       text: o.optionText,
       isCorrect: o.isCorrect,

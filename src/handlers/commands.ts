@@ -1,4 +1,5 @@
 import {Bot, Context} from 'grammy';
+import {MyContext} from '../types/context';
 import {formatTimes, parseTimes, validateTimes} from '../utils/timeUtils';
 import {createSchedule, deleteSchedule, getActiveSchedule, updateSchedule} from '../services/scheduleService';
 import {registerCronTask, unregisterCronTasks} from '../scheduler/cronScheduler';
@@ -8,27 +9,16 @@ import {createTemplate, deleteTemplate, getAllTemplates} from '../services/templ
 import {config} from '../config';
 import {
     createQuiz,
-    getAllQuizzes,
     deleteQuiz,
-    createQuestion,
-    getQuestionsByQuiz,
     deleteQuestion,
     getAllQuestionsFromQuiz,
+    getAllQuizzes,
+    getQuestionsByQuiz,
 } from '../services/quizService';
-import {
-    createSession,
-    getSession,
-    updateSession,
-    deleteSession,
-    hasActiveSession,
-    createQuestionAdditionState,
-    getQuestionAdditionState,
-    updateQuestionAdditionState,
-    deleteQuestionAdditionState,
-    hasQuestionAdditionState,
-} from '../services/quizSessionManager';
+import {createSession, deleteSession, getSession, hasActiveSession,} from '../services/quizSessionManager';
+import {quizListMenu, adminMainMenu} from '../menus/quizMenus';
 
-export function registerCommands(bot: Bot) {
+export function registerCommands(bot: Bot<MyContext>) {
     bot.command('setreminder', handleSetReminder);
     bot.command('myreminders', handleMyReminders);
     bot.command('editreminder', handleEditReminder);
@@ -51,8 +41,7 @@ export function registerCommands(bot: Bot) {
     bot.command('deletequestion', isAdmin, handleDeleteQuestion);
     bot.command('startquiz', handleStartQuiz);
     bot.command('cancelquiz', handleCancelQuiz);
-
-    bot.on('message:text', handleTextMessage);
+    bot.command('adminpanel', isAdmin, handleAdminPanel);
 }
 
 async function handleSetReminder(ctx: Context) {
@@ -567,30 +556,11 @@ async function handleClearStatus(ctx: Context) {
     }
 }
 
-async function handleCreateQuiz(ctx: Context) {
-    const input = ctx.match?.toString().trim();
-
-    if (!input) {
-        return ctx.reply(
-            '⚠️ Использование: /createquiz <название>\n\n' +
-            'Пример: /createquiz Медицина'
-        );
-    }
-
-    try {
-        const quiz = await createQuiz(input);
-        await ctx.reply(
-            `✅ Квиз '${quiz.name}' создан!\n\n` +
-            `Добавьте вопросы с помощью /addquestion ${quiz.name}`
-        );
-    } catch (error) {
-        console.error('Ошибка при создании квиза:', error);
-        const errorMessage = error instanceof Error ? error.message : 'Неизвестная ошибка';
-        await ctx.reply(`❌ ${errorMessage}`);
-    }
+async function handleCreateQuiz(ctx: MyContext) {
+    await ctx.conversation.enter('createQuiz');
 }
 
-async function handleListQuizzes(ctx: Context) {
+async function handleListQuizzes(ctx: MyContext) {
     const telegramId = ctx.from?.id;
     const isAdminUser = telegramId && config.adminTelegramId && BigInt(telegramId) === config.adminTelegramId;
 
@@ -603,7 +573,12 @@ async function handleListQuizzes(ctx: Context) {
 
         let message = '📋 Список квизов:\n\n';
 
-        quizzes.forEach((quiz, index) => {
+        quizzes.forEach((quiz: {
+            name: string;
+            isActive: boolean;
+            description?: string | null;
+            _count: { questions: number }
+        }, index: number) => {
             const status = isAdminUser ? (quiz.isActive ? '✅' : '❌') : '';
             message += `${index + 1}. ${status} ${quiz.name}\n`;
             message += `   📝 Вопросов: ${quiz._count.questions}\n`;
@@ -615,7 +590,7 @@ async function handleListQuizzes(ctx: Context) {
 
         message += `📊 Всего: ${quizzes.length} квизов`;
 
-        await ctx.reply(message);
+        await ctx.reply(message, {reply_markup: quizListMenu});
     } catch (error) {
         console.error('Ошибка при получении списка квизов:', error);
         await ctx.reply('❌ Произошла ошибка при получении списка квизов');
@@ -644,128 +619,25 @@ async function handleDeleteQuiz(ctx: Context) {
     }
 }
 
-async function handleAddQuestion(ctx: Context) {
-    const telegramId = ctx.from?.id;
-    const input = ctx.match?.toString().trim();
+async function handleAddQuestion(ctx: MyContext) {
+    const quizName = ctx.match?.toString().trim();
 
-    if (!telegramId) {
-        return ctx.reply('❌ Не удалось получить информацию о пользователе');
-    }
-
-    if (!input) {
+    if (!quizName) {
         return ctx.reply(
             '⚠️ Использование: /addquestion <название_квиза>\n\n' +
             'Пример: /addquestion Медицина'
         );
     }
 
-    try {
-        const quiz = await getAllQuizzes(true);
-        const foundQuiz = quiz.find(q => q.name === input);
-
-        if (!foundQuiz) {
-            return ctx.reply(`❌ Квиз '${input}' не найден`);
-        }
-
-        createQuestionAdditionState({
-            userId: BigInt(telegramId),
-            quizName: input,
-            options: [],
-            step: 'question',
-        });
-
-        await ctx.reply(`📝 Отправьте текст вопроса для квиза '${input}'\n\nДля отмены используйте /cancel`);
-    } catch (error) {
-        console.error('Ошибка при начале добавления вопроса:', error);
-        await ctx.reply('❌ Произошла ошибка');
+    if (!ctx.session) {
+        ctx.session = {};
     }
+    ctx.session.quizName = quizName;
+    await ctx.conversation.enter('addQuestion');
 }
 
-async function handleTextMessage(ctx: Context) {
-    const telegramId = ctx.from?.id;
-    const text = ctx.message?.text;
-
-    if (!telegramId || !text) {
-        return;
-    }
-
-    if (text === '/cancel') {
-        if (hasQuestionAdditionState(BigInt(telegramId))) {
-            deleteQuestionAdditionState(BigInt(telegramId));
-            return ctx.reply('❌ Добавление вопроса отменено');
-        }
-        return;
-    }
-
-    const state = getQuestionAdditionState(BigInt(telegramId));
-
-    if (!state) {
-        return;
-    }
-
-    if (state.step === 'question') {
-        updateQuestionAdditionState(BigInt(telegramId), {
-            questionText: text,
-            step: 'options',
-        });
-        return ctx.reply('📝 Отправьте вариант ответа 1 (всего нужно 4 варианта)');
-    }
-
-    if (state.step === 'options') {
-        const newOptions = [...state.options, text];
-        updateQuestionAdditionState(BigInt(telegramId), {
-            options: newOptions,
-        });
-
-        if (newOptions.length < 4) {
-            return ctx.reply(`📝 Отправьте вариант ответа ${newOptions.length + 1} (всего нужно 4 варианта)`);
-        }
-
-        let message = '📋 Варианты ответов:\n\n';
-        newOptions.forEach((opt, i) => {
-            message += `${i + 1}. ${opt}\n`;
-        });
-        message += '\n📝 Введите номер правильного ответа (1-4)';
-
-        updateQuestionAdditionState(BigInt(telegramId), {
-            step: 'correct_answer',
-        });
-
-        return ctx.reply(message);
-    }
-
-    if (state.step === 'correct_answer') {
-        const correctIndex = parseInt(text);
-
-        if (isNaN(correctIndex) || correctIndex < 1 || correctIndex > 4) {
-            return ctx.reply('❌ Введите число от 1 до 4');
-        }
-
-        try {
-            const options = state.options.map((opt, i) => ({
-                text: opt,
-                isCorrect: i === correctIndex - 1,
-            }));
-
-            const {question, totalQuestions} = await createQuestion(
-                state.quizName,
-                state.questionText!,
-                options
-            );
-
-            deleteQuestionAdditionState(BigInt(telegramId));
-
-            await ctx.reply(
-                `✅ Вопрос добавлен в квиз '${state.quizName}'!\n\n` +
-                `📊 Всего вопросов: ${totalQuestions}`
-            );
-        } catch (error) {
-            console.error('Ошибка при создании вопроса:', error);
-            const errorMessage = error instanceof Error ? error.message : 'Неизвестная ошибка';
-            await ctx.reply(`❌ ${errorMessage}`);
-            deleteQuestionAdditionState(BigInt(telegramId));
-        }
-    }
+async function handleAdminPanel(ctx: MyContext) {
+    await ctx.reply('🎛 Админ-панель', {reply_markup: adminMainMenu});
 }
 
 async function handleListQuestions(ctx: Context) {
@@ -793,10 +665,14 @@ async function handleListQuestions(ctx: Context) {
 
         let message = `📋 Вопросы квиза '${input}':\n\n`;
 
-        questionsToShow.forEach((q, index) => {
+        questionsToShow.forEach((q: {
+            id: string;
+            questionText: string;
+            options: Array<{ optionText: string; isCorrect: boolean }>
+        }, index: number) => {
             message += `${index + 1}. ${q.questionText}\n`;
             message += `   🆔 ${q.id}\n`;
-            q.options.forEach((opt, i) => {
+            q.options.forEach((opt: { optionText: string; isCorrect: boolean }, i: number) => {
                 const marker = opt.isCorrect ? '✅' : '  ';
                 message += `   ${marker} ${i + 1}) ${opt.optionText}\n`;
             });
@@ -839,6 +715,53 @@ async function handleDeleteQuestion(ctx: Context) {
         const errorMessage = error instanceof Error ? error.message : 'Неизвестная ошибка';
         await ctx.reply(`❌ ${errorMessage}`);
     }
+}
+
+export async function startQuizWithQuestions(ctx: Context, quizName: string, questions: Array<{
+    id: string;
+    questionText: string
+}>) {
+    const telegramId = ctx.from?.id;
+    const chatId = ctx.chat?.id;
+
+    if (!telegramId || !chatId) {
+        return;
+    }
+
+    const questionsData = questions.map(q => ({
+        id: q.id,
+        questionText: q.questionText,
+        options: [] as Array<{ id: string; text: string; isCorrect: boolean }>,
+    }));
+
+    for (const qData of questionsData) {
+        const {prisma} = await import('../lib/prisma');
+        const options = await prisma.quizOption.findMany({
+            where: {questionId: qData.id},
+        });
+        qData.options = options.map((opt: { id: string; optionText: string; isCorrect: boolean }) => ({
+            id: opt.id,
+            text: opt.optionText,
+            isCorrect: opt.isCorrect,
+        }));
+    }
+
+    for (let i = questionsData.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [questionsData[i], questionsData[j]] = [questionsData[j], questionsData[i]];
+    }
+
+    createSession({
+        userId: BigInt(telegramId),
+        chatId: BigInt(chatId),
+        quizName,
+        questions: questionsData,
+        currentIndex: 0,
+        correctCount: 0,
+        incorrectCount: 0,
+    });
+
+    await sendQuizQuestion(ctx, BigInt(telegramId), BigInt(chatId));
 }
 
 async function handleStartQuiz(ctx: Context) {
@@ -902,9 +825,9 @@ async function sendQuizQuestion(ctx: Context, userId: bigint, chatId: bigint) {
     const totalQuestions = session.questions.length;
 
     const keyboard = {
-        inline_keyboard: question.options.map(opt => [{
+        inline_keyboard: question.options.map((opt, index) => [{
             text: opt.text,
-            callback_data: `quiz_answer:${userId}_${chatId}:${opt.id}`,
+            callback_data: `qa:${userId}_${chatId}:${index}`,
         }]),
     };
 

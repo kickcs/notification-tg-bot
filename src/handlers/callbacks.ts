@@ -3,12 +3,12 @@ import { confirmReminder, getReminder } from '../services/reminderService';
 import { getRandomTemplate } from '../services/templateService';
 import { cancelRetry } from '../scheduler/cronScheduler';
 import { getSession, updateSession, deleteSession } from '../services/quizSessionManager';
+import { MyContext } from '../types/context';
 
-export function registerCallbacks(bot: Bot) {
+export function registerCallbacks(bot: Bot<MyContext>) {
   bot.callbackQuery(/^confirm_reminder:(.+)$/, handleConfirmReminder);
-  bot.callbackQuery(/^quiz_answer:(.+):(.+)$/, handleQuizAnswer);
+  bot.callbackQuery(/^qa:(.+):(.+)$/, handleQuizAnswer);
 }
-
 async function handleConfirmReminder(ctx: Context) {
   const match = ctx.callbackQuery?.data?.match(/^confirm_reminder:(.+)$/);
   
@@ -70,14 +70,14 @@ async function handleConfirmReminder(ctx: Context) {
 }
 
 async function handleQuizAnswer(ctx: Context) {
-  const match = ctx.callbackQuery?.data?.match(/^quiz_answer:(.+):(.+)$/);
+  const match = ctx.callbackQuery?.data?.match(/^qa:(.+):(.+)$/);
   
   if (!match) {
     return ctx.answerCallbackQuery({ text: 'Ошибка: некорректные данные' });
   }
 
   const sessionKey = match[1];
-  const optionId = match[2];
+  const optionIndex = parseInt(match[2]);
   const userId = ctx.from?.id;
 
   if (!userId) {
@@ -100,7 +100,7 @@ async function handleQuizAnswer(ctx: Context) {
   }
 
   const currentQuestion = session.questions[session.currentIndex];
-  const selectedOption = currentQuestion.options.find(opt => opt.id === optionId);
+  const selectedOption = currentQuestion.options[optionIndex];
 
   if (!selectedOption) {
     return ctx.answerCallbackQuery({ text: 'Ошибка: вариант ответа не найден' });
@@ -159,9 +159,9 @@ async function sendNextQuestion(ctx: Context, userId: bigint, chatId: bigint) {
   const totalQuestions = session.questions.length;
 
   const keyboard = {
-    inline_keyboard: question.options.map(opt => [{
+    inline_keyboard: question.options.map((opt, index) => [{
       text: opt.text,
-      callback_data: `quiz_answer:${userId}_${chatId}:${opt.id}`,
+      callback_data: `qa:${userId}_${chatId}:${index}`,
     }]),
   };
 
