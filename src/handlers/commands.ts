@@ -867,8 +867,7 @@ async function handleImportQuizCommand(ctx: Context) {
 
     await ctx.reply(
         '📤 Отправьте JSON файл с квизом\n\n' +
-        'Формат:\n' +
-        '```json\n' +
+        'Формат:\n\n' +
         '{\n' +
         '  "test_name": "Quiz Name",\n' +
         '  "questions": [\n' +
@@ -879,10 +878,8 @@ async function handleImportQuizCommand(ctx: Context) {
         '      "correct_answer": 1\n' +
         '    }\n' +
         '  ]\n' +
-        '}\n' +
-        '```\n' +
-        'correct_answer - индекс правильного ответа (0-3)',
-        { parse_mode: 'Markdown' }
+        '}\n\n' +
+        'correct_answer - индекс правильного ответа (0-3)'
     );
 }
 
