@@ -1,13 +1,26 @@
-import { Bot } from 'grammy';
+import { Bot, session } from 'grammy';
+import { conversations, createConversation } from '@grammyjs/conversations';
 import { config } from './config';
 import { prisma } from './lib/prisma';
 import { registerCommands } from './handlers/commands';
 import { registerCallbacks } from './handlers/callbacks';
 import { initializeScheduler, stopAllTasks } from './scheduler/cronScheduler';
 import { setBotInstance } from './lib/bot';
+import { addQuestionConversation } from './conversations/addQuestion';
+import { createQuizConversation } from './conversations/createQuiz';
+import { quizListMenu, adminMainMenu } from './menus/quizMenus';
+import { MyContext, SessionData } from './types/context';
 
-const bot = new Bot(config.botToken);
+const bot = new Bot<MyContext>(config.botToken);
 setBotInstance(bot);
+
+bot.use(session({ initial: (): SessionData => ({}) }));
+bot.use(conversations());
+bot.use(createConversation(addQuestionConversation, 'addQuestion'));
+bot.use(createConversation(createQuizConversation, 'createQuiz'));
+
+bot.use(quizListMenu);
+bot.use(adminMainMenu);
 
 bot.command('start', async (ctx) => {
   const telegramId = ctx.from?.id;

@@ -4,6 +4,7 @@ import { getAllActiveSchedules } from '../services/scheduleService';
 import { createReminder, incrementRetryCount, markReminderAsMissed, updateReminderMessageId } from '../services/reminderService';
 import { getRandomTemplate } from '../services/templateService';
 import { timeToCron, getCurrentTimeFormatted } from '../utils/timeUtils';
+import { MyContext } from '../types/context';
 
 const tasks = new Map<string, cron.ScheduledTask>();
 const retryTimeouts = new Map<string, NodeJS.Timeout>();
@@ -11,7 +12,7 @@ const retryTimeouts = new Map<string, NodeJS.Timeout>();
 const RETRY_INTERVAL_MS = 15 * 60 * 1000;
 const MAX_RETRIES = 3;
 
-export async function initializeScheduler(bot: Bot) {
+export async function initializeScheduler(bot: Bot<MyContext>) {
   console.log('🔄 Загрузка активных расписаний...');
   
   const schedules = await getAllActiveSchedules();
@@ -26,7 +27,7 @@ export async function initializeScheduler(bot: Bot) {
 }
 
 export function registerCronTask(
-  bot: Bot,
+  bot: Bot<MyContext>,
   scheduleId: string,
   userId: string,
   chatId: bigint,
@@ -61,7 +62,7 @@ export function unregisterCronTasks(scheduleId: string) {
   console.log(`🗑️  Удалено ${keysToDelete.length} задач для расписания ${scheduleId}`);
 }
 
-async function sendReminder(bot: Bot, scheduleId: string, userId: string, chatId: bigint) {
+async function sendReminder(bot: Bot<MyContext>, scheduleId: string, userId: string, chatId: bigint) {
   try {
     const reminder = await createReminder(scheduleId);
     const templateMessage = await getRandomTemplate('reminder');
@@ -84,7 +85,7 @@ async function sendReminder(bot: Bot, scheduleId: string, userId: string, chatId
   }
 }
 
-function scheduleRetry(bot: Bot, reminderId: string, userId: string, chatId: bigint, currentRetry: number) {
+function scheduleRetry(bot: Bot<MyContext>, reminderId: string, userId: string, chatId: bigint, currentRetry: number) {
   if (currentRetry >= MAX_RETRIES) {
     return;
   }

@@ -7,6 +7,16 @@
   resolved "https://registry.npmjs.org/@esbuild/darwin-arm64/-/darwin-arm64-0.25.11.tgz"
   integrity sha512-VekY0PBCukppoQrycFxUqkCojnTQhdec0vevUL/EDOCnXd9LKWqD/bHwMPzigIJXPhC59Vd1WFIL57SKs2mg4w==
 
+"@grammyjs/conversations@^2.1.0":
+  version "2.1.0"
+  resolved "https://registry.npmjs.org/@grammyjs/conversations/-/conversations-2.1.0.tgz"
+  integrity sha512-nYoHwFyXcQ2lkQejKReoINknkgFjeIZhyJNMBwHng5UHO/ewHKs1dV2XVaLrKkHTZ1gCZ+dKkjEp26wwHyQeGg==
+
+"@grammyjs/menu@^1.3.1":
+  version "1.3.1"
+  resolved "https://registry.npmjs.org/@grammyjs/menu/-/menu-1.3.1.tgz"
+  integrity sha512-HJslY/n76T1Ar5qDDhNtjLs+PpcrlB9aGsXu3CJHLt147DC3K3lpiRvRW/Xh9/x9hqYVw7KKbnvsQXVgzoU81Q==
+
 "@grammyjs/types@3.22.2":
   version "3.22.2"
   resolved "https://registry.npmjs.org/@grammyjs/types/-/types-3.22.2.tgz"
@@ -133,7 +143,7 @@ get-tsconfig@^4.7.5:
   dependencies:
     resolve-pkg-maps "^1.0.0"
 
-grammy@^1.21.1:
+grammy@^1.20.1, grammy@^1.21.1, grammy@^1.31.0:
   version "1.38.3"
   resolved "https://registry.npmjs.org/grammy/-/grammy-1.38.3.tgz"
   integrity sha512-1eQwNfxrRQ0JOFqd3n1nKqyWkHvCQRCNiH8e5aYm27mIjGPobgss58XN8GORC2ejAWM2+NSdUknrMhYj87cjGg==
