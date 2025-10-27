@@ -138,13 +138,15 @@ async function handleQuizAnswer(ctx: Context) {
     await editToNextQuestion(ctx, BigInt(sessionUserId), BigInt(sessionChatId), isCorrect, correctOption?.text);
   } else {
     try {
-      const resultText = isCorrect 
-        ? '✅ Правильно!' 
-        : `❌ Неправильно!\n\nПравильный ответ: ${correctOption?.text}`;
+      let resultText = '';
       
-      await ctx.editMessageText(
-        `${ctx.msg?.text}\n\n${resultText}`
-      );
+      if (isCorrect) {
+        resultText = '✅ Правильно!';
+      } else {
+        resultText = `❌ Неправильно!\n\nПравильный ответ: ${correctOption?.text}`;
+      }
+      
+      await ctx.editMessageText(resultText);
       await ctx.editMessageReplyMarkup({ reply_markup: { inline_keyboard: [] } });
     } catch (error) {
       console.error('Не удалось отредактировать сообщение:', error);
