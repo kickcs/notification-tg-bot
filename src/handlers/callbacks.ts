@@ -279,27 +279,45 @@ async function sendResultsToAdmin(ctx: Context, session: {
   const totalQuestions = session.answers.length;
   const percentage = Math.round((session.correctCount / totalQuestions) * 100);
 
-  let adminMessage = `📊 Результаты квиза\n\n`;
-  adminMessage += `👤 Пользователь: ${userName} ${userUsername}\n`;
-  adminMessage += `🆔 ID: ${session.userId}\n`;
-  adminMessage += `📝 Квиз: ${session.quizName}\n\n`;
-  adminMessage += `✅ Правильно: ${session.correctCount}\n`;
-  adminMessage += `❌ Неправильно: ${session.incorrectCount}\n`;
-  adminMessage += `📊 Результат: ${percentage}%\n\n`;
-  adminMessage += `📋 Ответы:\n\n`;
+  const MAX_MESSAGE_LENGTH = 4000;
 
-  session.answers.forEach((answer, index) => {
-    const icon = answer.isCorrect ? '✅' : '❌';
-    adminMessage += `${index + 1}. ${answer.questionText}\n`;
-    adminMessage += `   ${icon} Выбрано: ${answer.selectedOption}\n`;
-    if (!answer.isCorrect) {
-      adminMessage += `   ✓ Правильно: ${answer.correctOption}\n`;
-    }
-    adminMessage += `\n`;
-  });
+  let headerMessage = `📊 Результаты квиза\n\n`;
+  headerMessage += `👤 Пользователь: ${userName} ${userUsername}\n`;
+  headerMessage += `🆔 ID: ${session.userId}\n`;
+  headerMessage += `📝 Квиз: ${session.quizName}\n\n`;
+  headerMessage += `✅ Правильно: ${session.correctCount}\n`;
+  headerMessage += `❌ Неправильно: ${session.incorrectCount}\n`;
+  headerMessage += `📊 Результат: ${percentage}%\n\n`;
 
   try {
-    await ctx.api.sendMessage(Number(config.adminTelegramId), adminMessage);
+    await ctx.api.sendMessage(Number(config.adminTelegramId), headerMessage);
+
+    let currentMessage = `📋 Ответы:\n\n`;
+    let messageCount = 1;
+
+    for (let index = 0; index < session.answers.length; index++) {
+      const answer = session.answers[index];
+      const icon = answer.isCorrect ? '✅' : '❌';
+      
+      let answerText = `${index + 1}. ${answer.questionText}\n`;
+      answerText += `   ${icon} Выбрано: ${answer.selectedOption}\n`;
+      if (!answer.isCorrect) {
+        answerText += `   ✓ Правильно: ${answer.correctOption}\n`;
+      }
+      answerText += `\n`;
+
+      if (currentMessage.length + answerText.length > MAX_MESSAGE_LENGTH) {
+        await ctx.api.sendMessage(Number(config.adminTelegramId), currentMessage);
+        messageCount++;
+        currentMessage = `📋 Ответы (продолжение ${messageCount}):\n\n`;
+      }
+
+      currentMessage += answerText;
+    }
+
+    if (currentMessage.length > 20) {
+      await ctx.api.sendMessage(Number(config.adminTelegramId), currentMessage);
+    }
   } catch (error) {
     console.error('Не удалось отправить результаты администратору:', error);
   }
