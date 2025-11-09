@@ -74,6 +74,8 @@ model Reminder {
   @@index([scheduleId])
   @@index([status])
   @@index([sequenceOrder])
+  @@index([scheduleId, sequenceOrder, status])
+  @@index([scheduleId, status, sequenceOrder])
 }
 
 model Confirmation {

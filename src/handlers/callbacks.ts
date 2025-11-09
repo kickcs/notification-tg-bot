@@ -7,7 +7,7 @@ import { MyContext } from '../types/context';
 import { config } from '../config';
 import { QuizAnswer } from '../types/quiz';
 import { calculateDelayAmount, getDelayDescription } from '../utils/timeUtils';
-import { getUserMaxDelay, updateUserByTelegramId, getUserSettings } from '../services/userService';
+import { getUserMaxDelay, updateUserByTelegramId, getUserSettings, InvalidDelayError } from '../services/userService';
 import { getBotInstance } from '../lib/bot';
 
 export function registerCallbacks(bot: Bot<MyContext>) {
@@ -500,7 +500,15 @@ async function handleSettingsDelay(ctx: MyContext) {
     await showSettingsMenu(ctx);
   } catch (error) {
     console.error('Ошибка при обновлении максимальной задержки:', error);
-    await ctx.answerCallbackQuery({ text: 'Произошла ошибка' });
+
+    if (error instanceof InvalidDelayError) {
+      await ctx.answerCallbackQuery({
+        text: `❌ Недопустимое значение задержки`,
+        show_alert: true
+      });
+    } else {
+      await ctx.answerCallbackQuery({ text: 'Произошла ошибка' });
+    }
   }
 }
 

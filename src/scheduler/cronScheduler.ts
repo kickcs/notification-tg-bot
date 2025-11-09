@@ -30,6 +30,49 @@ const delayedTasks = new Map<string, NodeJS.Timeout>();
 
 const RETRY_INTERVAL_MS = 15 * 60 * 1000;
 const MAX_RETRIES = 3;
+const MAX_DELAYED_TASKS = 1000; // Предотвращение memory leak
+
+// Task cleanup management
+const taskTimestamps = new Map<string, number>();
+
+function cleanupOldTasks() {
+  const now = Date.now();
+  const maxAge = 24 * 60 * 60 * 1000; // 24 часа
+
+  // Очищаем старые задачи
+  for (const [key, timestamp] of taskTimestamps.entries()) {
+    if (now - timestamp > maxAge) {
+      const timeout = delayedTasks.get(key);
+      if (timeout) {
+        clearTimeout(timeout);
+        delayedTasks.delete(key);
+      }
+      taskTimestamps.delete(key);
+    }
+  }
+
+  // Если все еще слишком много задач, удаляем самые старые
+  if (delayedTasks.size > MAX_DELAYED_TASKS) {
+    const entries = Array.from(taskTimestamps.entries())
+      .sort((a, b) => a[1] - b[1]);
+
+    const toDelete = entries.slice(0, delayedTasks.size - MAX_DELAYED_TASKS);
+    for (const [key] of toDelete) {
+      const timeout = delayedTasks.get(key);
+      if (timeout) {
+        clearTimeout(timeout);
+        delayedTasks.delete(key);
+      }
+      taskTimestamps.delete(key);
+    }
+  }
+}
+
+function setDelayedTaskWithCleanup(key: string, timeout: NodeJS.Timeout) {
+  cleanupOldTasks();
+  delayedTasks.set(key, timeout);
+  taskTimestamps.set(key, Date.now());
+}
 
 export async function initializeScheduler(bot: Bot<MyContext>) {
   console.log('🔄 Загрузка активных расписаний...');
@@ -220,31 +263,76 @@ export async function scheduleNextSequentialReminder(
   confirmedReminderId: string
 ) {
   try {
-    const confirmedReminder = await prisma.reminder.findUnique({
-      where: { id: confirmedReminderId },
-      include: {
-        schedule: {
-          include: { user: true }
+    // Используем транзакцию для предотвращения race conditions
+    const result = await prisma.$transaction(async (tx) => {
+      const confirmedReminder = await tx.reminder.findUnique({
+        where: { id: confirmedReminderId },
+        include: {
+          schedule: {
+            include: { user: true }
+          }
         }
+      });
+
+      if (!confirmedReminder || !confirmedReminder.schedule.useSequentialDelay) {
+        return null;
       }
+
+      // Ищем следующее напоминание в последовательности
+      const nextReminder = await tx.reminder.findFirst({
+        where: {
+          scheduleId: confirmedReminder.scheduleId,
+          sequenceOrder: {
+            gt: confirmedReminder.sequenceOrder,
+          },
+          status: 'pending',
+        },
+        orderBy: {
+          sequenceOrder: 'asc',
+        },
+        include: {
+          schedule: {
+            include: { user: true }
+          }
+        }
+      });
+
+      if (!nextReminder) {
+        console.log(`✅ Последовательность для расписания ${confirmedReminder.scheduleId} завершена`);
+        return null;
+      }
+
+      // Помечаем как "processing" для предотвращения дублирования
+      const updatedReminder = await tx.reminder.update({
+        where: { id: nextReminder.id },
+        data: { status: 'processing' }
+      });
+
+      return {
+        reminder: updatedReminder,
+        schedule: nextReminder.schedule,
+        confirmedReminder
+      };
     });
 
-    if (!confirmedReminder || !confirmedReminder.schedule.useSequentialDelay) {
+    if (!result) {
       return;
     }
 
-    const nextReminder = await getNextReminderInSequence(
-      confirmedReminder.scheduleId,
-      confirmedReminder.sequenceOrder
-    );
+    const { reminder: nextReminder, schedule, confirmedReminder } = result;
 
-    if (!nextReminder) {
-      console.log(`✅ Последовательность для расписания ${confirmedReminder.scheduleId} завершена`);
+    const maxDelay = await getUserMaxDelay(schedule.user.telegramId);
+    const scheduledTime = schedule.times[nextReminder.sequenceOrder];
+
+    if (!scheduledTime) {
+      console.error(`❌ Не найдено время для sequenceOrder ${nextReminder.sequenceOrder} в расписании ${schedule.id}`);
+      await prisma.reminder.update({
+        where: { id: nextReminder.id },
+        data: { status: 'pending' } // Возвращаем в pending, т.к. не смогли обработать
+      });
       return;
     }
 
-    const maxDelay = await getUserMaxDelay(confirmedReminder.schedule.user.telegramId);
-    const scheduledTime = confirmedReminder.schedule.times[nextReminder.sequenceOrder];
     const nextNotificationTime = calculateNextNotificationTime(
       scheduledTime,
       confirmedReminder.actualConfirmedAt!,
@@ -259,10 +347,19 @@ export async function scheduleNextSequentialReminder(
     } else {
       // Планируем отложенную отправку
       const timeout = setTimeout(async () => {
-        await sendSequentialReminder(bot, nextReminder);
+        try {
+          await sendSequentialReminder(bot, nextReminder);
+        } catch (error) {
+          console.error('❌ Ошибка при отправке отложенного напоминания:', error);
+          // Возвращаем в pending статус при ошибке
+          await prisma.reminder.update({
+            where: { id: nextReminder.id },
+            data: { status: 'pending' }
+          });
+        }
       }, delayMs);
 
-      delayedTasks.set(`${confirmedReminder.scheduleId}-${nextReminder.sequenceOrder}`, timeout);
+      setDelayedTaskWithCleanup(`${schedule.id}-${nextReminder.sequenceOrder}`, timeout);
 
       const delayDescription = getDelayDescription(Math.floor(delayMs / (1000 * 60)));
       console.log(`⏰ Запланировано следующее напоминание ${nextReminder.id} через ${delayDescription} в ${nextNotificationTime.toLocaleTimeString()}`);
@@ -278,6 +375,7 @@ export function cancelDelayedTask(scheduleId: string, sequenceOrder: number) {
   if (timeout) {
     clearTimeout(timeout);
     delayedTasks.delete(key);
+    taskTimestamps.delete(key);
   }
 }
 
@@ -296,6 +394,8 @@ export function stopAllTasks() {
     clearTimeout(timeout);
   }
   delayedTasks.clear();
+
+  taskTimestamps.clear();
 
   console.log('🛑 Все задачи остановлены');
 }
