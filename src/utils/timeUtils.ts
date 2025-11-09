@@ -30,3 +30,81 @@ export function getCurrentTimeFormatted(): string {
   const minutes = now.getMinutes().toString().padStart(2, '0');
   return `${hours}:${minutes}`;
 }
+
+export function calculateDelayAmount(actualConfirmedAt: Date, scheduledTime: string): number {
+  const [hours, minutes] = scheduledTime.split(':').map(Number);
+
+  const scheduledDate = new Date();
+  scheduledDate.setHours(hours, minutes, 0, 0);
+
+  // Если scheduledTime в прошлом относительно текущего дня, добавляем день
+  if (scheduledDate < actualConfirmedAt && scheduledDate.toDateString() === actualConfirmedAt.toDateString()) {
+    scheduledDate.setDate(scheduledDate.getDate() + 1);
+  }
+
+  const diffMs = actualConfirmedAt.getTime() - scheduledDate.getTime();
+  const diffMinutes = Math.floor(diffMs / (1000 * 60));
+
+  return Math.max(0, diffMinutes);
+}
+
+export function addDelayToTime(scheduledTime: string, delayMinutes: number): Date {
+  const [hours, minutes] = scheduledTime.split(':').map(Number);
+
+  const scheduledDate = new Date();
+  scheduledDate.setHours(hours, minutes, 0, 0);
+
+  scheduledDate.setMinutes(scheduledDate.getMinutes() + delayMinutes);
+
+  return scheduledDate;
+}
+
+export function calculateNextNotificationTime(
+  scheduledTime: string,
+  actualConfirmedAt: Date,
+  maxDelayMinutes: number
+): Date {
+  const actualDelay = calculateDelayAmount(actualConfirmedAt, scheduledTime);
+  const cappedDelay = Math.min(actualDelay, maxDelayMinutes);
+
+  return addDelayToTime(scheduledTime, cappedDelay);
+}
+
+export function isTimeWithinMaxDelay(
+  actualTime: Date,
+  scheduledTime: string,
+  maxDelayMinutes: number
+): boolean {
+  const delay = calculateDelayAmount(actualTime, scheduledTime);
+  return delay <= maxDelayMinutes;
+}
+
+export function formatDateTime(date: Date): string {
+  const year = date.getFullYear();
+  const month = (date.getMonth() + 1).toString().padStart(2, '0');
+  const day = date.getDate().toString().padStart(2, '0');
+  const hours = date.getHours().toString().padStart(2, '0');
+  const minutes = date.getMinutes().toString().padStart(2, '0');
+
+  return `${year}-${month}-${day} ${hours}:${minutes}`;
+}
+
+export function getDelayDescription(delayMinutes: number): string {
+  if (delayMinutes < 60) {
+    return `${delayMinutes} минут`;
+  } else if (delayMinutes < 1440) { // Less than 24 hours
+    const hours = Math.floor(delayMinutes / 60);
+    const minutes = delayMinutes % 60;
+    if (minutes === 0) {
+      return `${hours} час${hours > 1 ? 'а' : ''}`;
+    }
+    return `${hours} час${hours > 1 ? 'а' : ''} ${minutes} минут`;
+  } else {
+    const days = Math.floor(delayMinutes / 1440);
+    const hours = Math.floor((delayMinutes % 1440) / 60);
+    if (hours === 0) {
+      return `${days} день${days > 1 ? '' : ''}`;
+    }
+    return `${days} день${days > 1 ? '' : ''} ${hours} час${hours > 1 ? 'а' : ''}`;
+  }
+}

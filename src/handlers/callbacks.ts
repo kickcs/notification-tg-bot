@@ -1,11 +1,14 @@
-import { Bot, Context } from 'grammy';
+import { Bot, Context, InlineKeyboard } from 'grammy';
 import { confirmReminder, getReminder } from '../services/reminderService';
 import { getRandomTemplate } from '../services/templateService';
-import { cancelRetry } from '../scheduler/cronScheduler';
+import { cancelRetry, scheduleNextSequentialReminder } from '../scheduler/cronScheduler';
 import { getSession, updateSession, deleteSession } from '../services/quizSessionManager';
 import { MyContext } from '../types/context';
 import { config } from '../config';
 import { QuizAnswer } from '../types/quiz';
+import { calculateDelayAmount, getDelayDescription } from '../utils/timeUtils';
+import { getUserMaxDelay, updateUserByTelegramId, getUserSettings } from '../services/userService';
+import { getBotInstance } from '../lib/bot';
 
 export function registerCallbacks(bot: Bot<MyContext>) {
   bot.callbackQuery(/^confirm_reminder:(.+)$/, handleConfirmReminder);
@@ -13,10 +16,13 @@ export function registerCallbacks(bot: Bot<MyContext>) {
   bot.callbackQuery(/^add_question:(.+)$/, handleAddQuestionButton);
   bot.callbackQuery(/^list_questions:(.+)$/, handleListQuestionsButton);
   bot.callbackQuery(/^finish_adding:(.+)$/, handleFinishAddingButton);
+  bot.callbackQuery(/^settings_sequential:(.+)$/, handleSettingsSequential);
+  bot.callbackQuery(/^settings_delay:(.+)$/, handleSettingsDelay);
+  bot.callbackQuery(/^settings_back$/, handleSettingsBack);
 }
-async function handleConfirmReminder(ctx: Context) {
+async function handleConfirmReminder(ctx: MyContext) {
   const match = ctx.callbackQuery?.data?.match(/^confirm_reminder:(.+)$/);
-  
+
   if (!match) {
     return ctx.answerCallbackQuery({ text: 'Ошибка: некорректные данные' });
   }
@@ -40,19 +46,30 @@ async function handleConfirmReminder(ctx: Context) {
     }
 
     if (BigInt(userId) !== reminder.schedule.user.telegramId) {
-      return ctx.answerCallbackQuery({ 
+      return ctx.answerCallbackQuery({
         text: 'Это напоминание не для вас',
-        show_alert: true 
+        show_alert: true
       });
     }
 
-    await confirmReminder(reminderId);
+    const now = new Date();
+    let delayMinutes: number | undefined;
+
+    // Если это последовательное расписание, рассчитываем задержку
+    if (reminder.schedule.useSequentialDelay) {
+      const scheduledTime = reminder.schedule.times[reminder.sequenceOrder];
+      const actualDelay = calculateDelayAmount(now, scheduledTime);
+      const maxDelay = await getUserMaxDelay(reminder.schedule.user.telegramId);
+      delayMinutes = Math.min(actualDelay, maxDelay);
+    }
+
+    await confirmReminder(reminderId, delayMinutes);
     cancelRetry(reminderId);
 
     await ctx.answerCallbackQuery({ text: '✅ Подтверждено!' });
 
     const rewardMessage = await getRandomTemplate('reward');
-    
+
     try {
       await ctx.deleteMessage();
     } catch (error) {
@@ -64,10 +81,22 @@ async function handleConfirmReminder(ctx: Context) {
         console.error('Не удалось отредактировать сообщение:', editError);
       }
     }
-    
-    await ctx.reply(rewardMessage);
 
-    console.log(`✅ Напоминание ${reminderId} подтверждено пользователем ${userId}`);
+    // Добавляем информацию о задержке, если она есть
+    let messageToSend = rewardMessage;
+    if (delayMinutes && delayMinutes > 0) {
+      const delayDescription = getDelayDescription(delayMinutes);
+      messageToSend += `\n\n⏰ Следующее уведомление придет с задержкой в ${delayDescription}`;
+    }
+
+    await ctx.reply(messageToSend);
+
+    // Планируем следующее последовательное уведомление
+    if (reminder.schedule.useSequentialDelay) {
+      await scheduleNextSequentialReminder(getBotInstance(), reminderId);
+    }
+
+    console.log(`✅ Напоминание ${reminderId} подтверждено пользователем ${userId}${delayMinutes ? ` (задержка: ${delayMinutes} мин)` : ''}`);
   } catch (error) {
     console.error('Ошибка при подтверждении напоминания:', error);
     await ctx.answerCallbackQuery({ text: 'Произошла ошибка' });
@@ -395,15 +424,15 @@ async function handleListQuestionsButton(ctx: Context) {
 
 async function handleFinishAddingButton(ctx: Context) {
   const match = ctx.callbackQuery?.data?.match(/^finish_adding:(.+)$/);
-  
+
   if (!match) {
     return ctx.answerCallbackQuery({ text: 'Ошибка: некорректные данные' });
   }
 
   const quizName = match[1];
-  
+
   await ctx.answerCallbackQuery({ text: '✅ Завершено!' });
-  
+
   try {
     await ctx.editMessageText(
       `✅ Квиз '${quizName}' готов!\n\n` +
@@ -421,5 +450,109 @@ async function handleFinishAddingButton(ctx: Context) {
     } catch (deleteError) {
       console.error('Не удалось удалить сообщение:', deleteError);
     }
+  }
+}
+
+async function handleSettingsSequential(ctx: MyContext) {
+  const match = ctx.callbackQuery?.data?.match(/^settings_sequential:(.+)$/);
+
+  if (!match) {
+    return ctx.answerCallbackQuery({ text: 'Ошибка: некорректные данные' });
+  }
+
+  const value = match[1];
+  const isEnabled = value === 'true';
+  const userId = ctx.from?.id;
+
+  if (!userId) {
+    return ctx.answerCallbackQuery({ text: 'Ошибка: не удалось получить ваш ID' });
+  }
+
+  try {
+    await updateUserByTelegramId(BigInt(userId), { sequentialMode: isEnabled });
+    await ctx.answerCallbackQuery({ text: `✅ Режим ${isEnabled ? 'включен' : 'выключен'}` });
+
+    await showSettingsMenu(ctx);
+  } catch (error) {
+    console.error('Ошибка при обновлении режима последовательности:', error);
+    await ctx.answerCallbackQuery({ text: 'Произошла ошибка' });
+  }
+}
+
+async function handleSettingsDelay(ctx: MyContext) {
+  const match = ctx.callbackQuery?.data?.match(/^settings_delay:(.+)$/);
+
+  if (!match) {
+    return ctx.answerCallbackQuery({ text: 'Ошибка: некорректные данные' });
+  }
+
+  const delayMinutes = parseInt(match[1]);
+  const userId = ctx.from?.id;
+
+  if (!userId) {
+    return ctx.answerCallbackQuery({ text: 'Ошибка: не удалось получить ваш ID' });
+  }
+
+  try {
+    await updateUserByTelegramId(BigInt(userId), { maxDelayMinutes: delayMinutes });
+    await ctx.answerCallbackQuery({ text: `✅ Максимальная задержка установлена: ${getDelayDescription(delayMinutes)}` });
+
+    await showSettingsMenu(ctx);
+  } catch (error) {
+    console.error('Ошибка при обновлении максимальной задержки:', error);
+    await ctx.answerCallbackQuery({ text: 'Произошла ошибка' });
+  }
+}
+
+async function handleSettingsBack(ctx: MyContext) {
+  await ctx.answerCallbackQuery();
+  await showSettingsMenu(ctx);
+}
+
+export async function showSettingsMenu(ctx: MyContext) {
+  const userId = ctx.from?.id;
+
+  if (!userId) {
+    return ctx.reply('Ошибка: не удалось получить ваш ID');
+  }
+
+  try {
+    const settings = await getUserSettings(userId.toString());
+
+    let message = '⚙️ *Настройки уведомлений*\n\n';
+    message += `🔗 *Последовательный режим:* ${settings.sequentialMode ? '✅ Включен' : '❌ Выключен'}\n`;
+    message += `⏰ *Максимальная задержка:* ${getDelayDescription(settings.maxDelayMinutes)}\n\n`;
+    message += 'Выберите действие для изменения настроек:';
+
+    const keyboard = new InlineKeyboard();
+
+    // Кнопки для режима последовательности
+    if (settings.sequentialMode) {
+      keyboard.text('❌ Выключить последовательный режим', 'settings_sequential:false');
+    } else {
+      keyboard.text('✅ Включить последовательный режим', 'settings_sequential:true');
+    }
+    keyboard.row();
+
+    // Кнопки для максимальной задержки
+    const delayOptions = [15, 30, 60, 120];
+    for (const delay of delayOptions) {
+      const isActive = delay === settings.maxDelayMinutes;
+      const prefix = isActive ? '🔘' : '⚪';
+      keyboard.text(`${prefix} ${getDelayDescription(delay)}`, `settings_delay:${delay}`);
+
+      // Разделяем кнопки по 2 в ряд
+      if (delayOptions.indexOf(delay) % 2 === 1) {
+        keyboard.row();
+      }
+    }
+
+    await ctx.reply(message, {
+      reply_markup: keyboard,
+      parse_mode: 'Markdown',
+    });
+  } catch (error) {
+    console.error('Ошибка при отображении настроек:', error);
+    await ctx.reply('Произошла ошибка при загрузке настроек');
   }
 }

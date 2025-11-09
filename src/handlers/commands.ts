@@ -1,8 +1,9 @@
-import {Bot, Context} from 'grammy';
+import {Bot, Context, InlineKeyboard} from 'grammy';
 import {MyContext} from '../types/context';
 import {formatTimes, parseTimes, validateTimes} from '../utils/timeUtils';
 import {createSchedule, deleteSchedule, getActiveSchedule, updateSchedule} from '../services/scheduleService';
 import {registerCronTask, unregisterCronTasks} from '../scheduler/cronScheduler';
+import {createRemindersForSchedule} from '../services/reminderService';
 import {getBotInstance} from '../lib/bot';
 import {isAdmin} from '../middleware/isAdmin';
 import {createTemplate, deleteTemplate, getAllTemplates} from '../services/templateService';
@@ -18,12 +19,16 @@ import {
 import {createSession, deleteSession, getSession, hasActiveSession,} from '../services/quizSessionManager';
 import {quizListMenu, adminMainMenu} from '../menus/quizMenus';
 import {importQuizFromJson} from '../services/quizImportService';
+import {getUserSettings, updateUserByTelegramId} from '../services/userService';
+import {getDelayDescription} from '../utils/timeUtils';
+import {showSettingsMenu} from './callbacks';
 
 export function registerCommands(bot: Bot<MyContext>) {
     bot.command('setreminder', handleSetReminder);
     bot.command('myreminders', handleMyReminders);
     bot.command('editreminder', handleEditReminder);
     bot.command('deletereminder', handleDeleteReminder);
+    bot.command('settings', handleSettings);
     bot.command('help', handleHelp);
     bot.command('whoami', handleWhoami);
 
@@ -99,17 +104,48 @@ async function handleSetReminder(ctx: Context) {
             });
         }
 
-        const schedule = await createSchedule(dbUser.id, BigInt(chatId), times);
+        const {prisma} = await import('../lib/prisma');
+
+        // Получаем настройки пользователя для определения режима по умолчанию
+        const userSettings = await getUserSettings(dbUser.id);
+        const defaultSequentialMode = userSettings.sequentialMode;
+
+        // Для последовательного режима создаем все напоминания заранее
+        let schedule;
+        if (defaultSequentialMode) {
+            schedule = await prisma.schedule.create({
+                data: {
+                    userId: dbUser.id,
+                    chatId: BigInt(chatId),
+                    times,
+                    useSequentialDelay: true,
+                    isActive: true,
+                },
+            });
+
+            // Создаем все напоминания для последовательности
+            await createRemindersForSchedule(schedule.id, times);
+        } else {
+            schedule = await createSchedule(dbUser.id, BigInt(chatId), times);
+        }
 
         for (const time of times) {
             registerCronTask(getBotInstance(), schedule.id, dbUser.id, BigInt(chatId), time);
         }
 
-        await ctx.reply(
-            `✅ Расписание создано!\n\n` +
-            `⏰ Время напоминаний: ${formatTimes(times)}\n\n` +
-            `Вы будете получать напоминания о приеме таблеток в указанное время каждый день.`
-        );
+        let successMessage = `✅ Расписание создано!\n\n`;
+        successMessage += `⏰ Время напоминаний: ${formatTimes(times)}\n`;
+        if (defaultSequentialMode) {
+            successMessage += `🔗 Режим: Последовательный (включены задержки)\n\n`;
+            successMessage += `Уведомления будут приходить последовательно. Каждое следующее уведомление придет только после подтверждения предыдущего.`;
+            successMessage += `\nИспользуйте /settings для изменения режима и максимальной задержки.`;
+        } else {
+            successMessage += `🔗 Режим: Обычный\n\n`;
+            successMessage += `Вы будете получать напоминания в указанное время каждый день независимо от подтверждений.`;
+            successMessage += `\nИспользуйте /settings для включения последовательного режима.`;
+        }
+
+        await ctx.reply(successMessage);
     } catch (error) {
         if (error instanceof Error && error.message.includes('уже есть активное расписание')) {
             return ctx.reply(
@@ -147,11 +183,19 @@ async function handleMyReminders(ctx: Context) {
             );
         }
 
-        await ctx.reply(
-            `📋 Ваше расписание:\n\n` +
-            `⏰ Время напоминаний: ${formatTimes(schedule.times)}\n` +
-            `📅 Создано: ${schedule.createdAt.toLocaleString('ru-RU')}`
-        );
+        let scheduleMessage = `📋 Ваше расписание:\n\n`;
+        scheduleMessage += `⏰ Время напоминаний: ${formatTimes(schedule.times)}\n`;
+        scheduleMessage += `📅 Создано: ${schedule.createdAt.toLocaleString('ru-RU')}\n`;
+
+        if (schedule.useSequentialDelay) {
+            scheduleMessage += `🔗 Режим: Последовательный (задержки включены)\n\n`;
+            scheduleMessage += `💡 Уведомления приходят последовательно. Каждое следующее уведомление придет только после подтверждения предыдущего.`;
+        } else {
+            scheduleMessage += `🔗 Режим: Обычный\n\n`;
+            scheduleMessage += `💡 Уведомления приходят по расписанию независимо от подтверждений.`;
+        }
+
+        await ctx.reply(scheduleMessage);
     } catch (error) {
         console.error('Ошибка при получении расписания:', error);
         await ctx.reply('❌ Произошла ошибка при получении расписания');
@@ -203,16 +247,34 @@ async function handleEditReminder(ctx: Context) {
 
         unregisterCronTasks(schedule.id);
 
+        // Проверяем, был ли это последовательный режим
+        const isSequential = schedule.useSequentialDelay;
+
         await updateSchedule(schedule.id, times);
+
+        // Если это последовательный режим, пересоздаем напоминания
+        if (isSequential) {
+            // Удаляем старые напоминания
+            const {prisma} = await import('../lib/prisma');
+            await prisma.reminder.deleteMany({
+                where: { scheduleId: schedule.id }
+            });
+
+            // Создаем новые напоминания для последовательности
+            await createRemindersForSchedule(schedule.id, times);
+        }
 
         for (const time of times) {
             registerCronTask(getBotInstance(), schedule.id, user.id, BigInt(chatId), time);
         }
 
-        await ctx.reply(
-            `✅ Расписание обновлено!\n\n` +
-            `⏰ Новое время напоминаний: ${formatTimes(times)}`
-        );
+        let updateMessage = `✅ Расписание обновлено!\n\n`;
+        updateMessage += `⏰ Новое время напоминаний: ${formatTimes(times)}`;
+        if (isSequential) {
+            updateMessage += `\n🔗 Режим: Последовательный (задержки включены)`;
+        }
+
+        await ctx.reply(updateMessage);
     } catch (error) {
         console.error('Ошибка при редактировании расписания:', error);
         await ctx.reply('❌ Произошла ошибка при редактировании расписания');
@@ -257,11 +319,15 @@ async function handleHelp(ctx: Context) {
 
     let helpText = '📚 Доступные команды:\n\n' +
         '🔹 /setreminder <время> - Создать расписание напоминаний\n' +
-        '   Пример: /setreminder 09:00,14:00,21:00\n\n' +
+        '   Пример: /setreminder 09:00,14:00,21:00\n' +
+        '   ⚡ Режим зависит от ваших настроек в /settings\n\n' +
         '🔹 /myreminders - Показать текущее расписание\n\n' +
         '🔹 /editreminder <время> - Изменить расписание\n' +
         '   Пример: /editreminder 10:00,16:00\n\n' +
         '🔹 /deletereminder - Удалить расписание\n\n' +
+        '🔹 /settings - Настроить режим уведомлений и задержки\n' +
+        '   ⚙️ Включить/выключить последовательный режим\n' +
+        '   ⏰ Установить максимальное время задержки\n\n' +
         '🔹 /whoami - Проверить свой статус и ID\n\n' +
         '🔹 /help - Показать эту справку\n\n' +
         '🎯 Квиз-викторина:\n\n' +
@@ -270,7 +336,11 @@ async function handleHelp(ctx: Context) {
         '   Пример: /startquiz Медицина\n\n' +
         '🔹 /cancelquiz - Отменить текущий квиз\n\n' +
         '💡 Формат времени: HH:MM (24-часовой)\n' +
-        '💡 Несколько времен указывайте через запятую';
+        '💡 Несколько времен указывайте через запятую\n\n' +
+        '🔄 *Режимы работы:*\n\n' +
+        '📋 *Обычный режим:* Уведомления приходят по расписанию независимо от подтверждений.\n\n' +
+        '🔗 *Последовательный режим:* Каждое следующее уведомление приходит только после подтверждения предыдущего. Время следующего уведомления сдвигается на время задержки подтверждения.\n\n' +
+        '💡 *Пример:* Расписание 9:00, 14:00, 18:00. Если подтвердить 9:00 уведомление в 9:30 (задержка 30 минут), то 14:00 уведомление придет в 14:30.';
 
     if (isAdminUser) {
         helpText += '\n\n' +
@@ -924,5 +994,27 @@ async function handleImportQuizDocument(ctx: Context) {
         console.error('Ошибка при импорте квиза:', error);
         const errorMessage = error instanceof Error ? error.message : 'Неизвестная ошибка';
         await ctx.reply(`❌ Ошибка при импорте: ${errorMessage}`);
+    }
+}
+
+async function handleSettings(ctx: MyContext) {
+    const telegramId = ctx.from?.id;
+
+    if (!telegramId) {
+        return ctx.reply('❌ Не удалось получить информацию о пользователе');
+    }
+
+    try {
+        const {prisma} = await import('../lib/prisma');
+        const user = await prisma.user.findUnique({where: {telegramId: BigInt(telegramId)}});
+
+        if (!user) {
+            return ctx.reply('Сначала создайте расписание с помощью /setreminder');
+        }
+
+        await showSettingsMenu(ctx);
+    } catch (error) {
+        console.error('Ошибка при отображении настроек:', error);
+        await ctx.reply('❌ Произошла ошибка при загрузке настроек');
     }
 }

@@ -8,19 +8,21 @@ datasource db {
 }
 
 model User {
-  id           String   @id @default(uuid())
-  telegramId   BigInt   @unique
-  username     String?
-  firstName    String?
-  lastName     String?
-  chatId       BigInt?
-  customStatus String?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-  
+  id                String   @id @default(uuid())
+  telegramId        BigInt   @unique
+  username          String?
+  firstName         String?
+  lastName          String?
+  chatId            BigInt?
+  customStatus      String?
+  maxDelayMinutes   Int      @default(60)
+  sequentialMode    Boolean  @default(false)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
   notifications Notification[]
   schedules     Schedule[]
-  
+
   @@map("users")
 }
 
@@ -37,36 +39,41 @@ model Notification {
 }
 
 model Schedule {
-  id        String   @id @default(uuid())
-  userId    String
-  chatId    BigInt
-  times     String[]
-  isActive  Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  
+  id                 String   @id @default(uuid())
+  userId             String
+  chatId             BigInt
+  times              String[]
+  isActive           Boolean  @default(true)
+  useSequentialDelay Boolean  @default(false)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
   user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
   reminders Reminder[]
-  
+
   @@map("schedules")
   @@index([userId])
   @@index([chatId])
 }
 
 model Reminder {
-  id          String   @id @default(uuid())
-  scheduleId  String
-  status      String   @default("pending")
-  retryCount  Int      @default(0)
-  sentAt      DateTime @default(now())
-  messageId   Int?
-  
+  id                 String   @id @default(uuid())
+  scheduleId         String
+  status             String   @default("pending")
+  retryCount         Int      @default(0)
+  sentAt             DateTime @default(now())
+  messageId          Int?
+  actualConfirmedAt  DateTime?
+  sequenceOrder      Int
+  delayMinutes       Int?
+
   schedule      Schedule       @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
   confirmations Confirmation[]
-  
+
   @@map("reminders")
   @@index([scheduleId])
   @@index([status])
+  @@index([sequenceOrder])
 }
 
 model Confirmation {
