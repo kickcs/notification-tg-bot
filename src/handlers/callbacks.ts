@@ -8,6 +8,7 @@ import { config } from '../config';
 import { QuizAnswer } from '../types/quiz';
 import { calculateDelayAmount, getDelayDescription } from '../utils/timeUtils';
 import { getUserMaxDelay, updateUserByTelegramId, getUserSettings, getUserByTelegramId, InvalidDelayError } from '../services/userService';
+import { logger } from '../utils/logger';
 import { getBotInstance } from '../lib/bot';
 
 export function registerCallbacks(bot: Bot<MyContext>) {
@@ -97,7 +98,7 @@ async function handleConfirmReminder(ctx: MyContext) {
       await scheduleNextSequentialReminder(getBotInstance(), reminderId);
     }
 
-    console.log(`✅ Напоминание ${reminderId} подтверждено пользователем ${userId}${delayMinutes ? ` (задержка: ${delayMinutes} мин)` : ''}`);
+    logger.debug(`Reminder ${reminderId} confirmed by user ${userId}${delayMinutes ? ` (delay: ${delayMinutes} min)` : ''}`);
   } catch (error) {
     console.error('Ошибка при подтверждении напоминания:', error);
     await ctx.answerCallbackQuery({ text: 'Произошла ошибка' });
@@ -479,7 +480,7 @@ async function handleSettingsSequential(ctx: MyContext) {
     for (const schedule of schedules) {
       try {
         await updateScheduleSequentialMode(schedule.id, isEnabled);
-        console.log(`🔄 Обновлено расписание ${schedule.id} для пользователя ${userId}: useSequentialDelay = ${isEnabled}`);
+        logger.debug(`Updated schedule ${schedule.id} for user ${userId}: useSequentialDelay = ${isEnabled}`);
       } catch (error) {
         console.error(`❌ Ошибка при обновлении расписания ${schedule.id}:`, error);
       }

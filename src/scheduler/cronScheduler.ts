@@ -28,6 +28,7 @@ import {
 import { MyContext } from '../types/context';
 import { hasValidSchedule, hasValidChatId, chatIdToString } from '../utils/idUtils';
 import { getUserMaxDelay } from '../services/userService';
+import { logger } from '../utils/logger';
 
 const tasks = new Map<string, cron.ScheduledTask>();
 const retryTimeouts = new Map<string, NodeJS.Timeout>();
@@ -81,17 +82,17 @@ function setDelayedTaskWithCleanup(key: string, timeout: NodeJS.Timeout) {
 }
 
 export async function initializeScheduler(bot: Bot<MyContext>) {
-  console.log('🔄 Загрузка активных расписаний...');
-  
+  logger.debug('Loading active schedules...');
+
   const schedules = await getAllActiveSchedules();
-  
+
   for (const schedule of schedules) {
     for (const time of schedule.times) {
       registerCronTask(bot, schedule.id, schedule.userId, schedule.chatId, time);
     }
   }
-  
-  console.log(`✅ Загружено ${schedules.length} расписаний`);
+
+  logger.info(`Loaded ${schedules.length} schedules`);
 }
 
 export function registerCronTask(
@@ -103,66 +104,62 @@ export function registerCronTask(
 ) {
   const cronExpression = timeToCron(time);
   const taskKey = `${scheduleId}-${time}`;
-  
+
   if (tasks.has(taskKey)) {
     return;
   }
-  
+
   const task = cron.schedule(cronExpression, async () => {
     await sendReminder(bot, scheduleId, userId, chatId, time);
   });
-  
+
   tasks.set(taskKey, task);
-  console.log(`📅 Зарегистрирована задача: ${taskKey} (${cronExpression})`);
+  logger.debug(`Registered cron task: ${taskKey}`);
 }
 
 export function unregisterCronTasks(scheduleId: string) {
   const keysToDelete: string[] = [];
-  
+
   for (const [key, task] of tasks.entries()) {
     if (key.startsWith(`${scheduleId}-`)) {
       task.stop();
       keysToDelete.push(key);
     }
   }
-  
+
   keysToDelete.forEach(key => tasks.delete(key));
-  console.log(`🗑️  Удалено ${keysToDelete.length} задач для расписания ${scheduleId}`);
+  if (keysToDelete.length > 0) {
+    logger.debug(`Removed ${keysToDelete.length} cron tasks for schedule ${scheduleId}`);
+  }
 }
 
 async function sendReminder(bot: Bot<MyContext>, scheduleId: string, userId: string, chatId: bigint, time: string) {
   try {
-    console.log(`🔍 Проверка напоминания для расписания ${scheduleId} в ${time}`);
-
-    // Для последовательного режима проверяем, есть ли уже pending напоминания
     const schedule = await prisma.schedule.findUnique({
       where: { id: scheduleId },
       include: { user: true }
     });
 
     if (!schedule) {
-      console.error(`❌ Расписание ${scheduleId} не найдено`);
+      logger.error(`Schedule ${scheduleId} not found`);
       return;
     }
-
-    console.log(`📋 Расписание ${scheduleId} found. useSequentialDelay: ${schedule.useSequentialDelay}, sequentialMode: ${schedule.user.sequentialMode}`);
 
     if (schedule.useSequentialDelay) {
       // В последовательном режиме проверяем только ОТПРАВЛЕННЫЕ но неподтвержденные напоминания
       const hasSentButNotConfirmed = await hasSentButUnconfirmedReminders(scheduleId);
       if (hasSentButNotConfirmed) {
-        console.log(`⏭️ Пропуск отправки для расписания ${scheduleId} - есть отправленные но неподтвержденные напоминания`);
+        logger.debug(`Skipping sequential reminder for schedule ${scheduleId} - has unconfirmed reminders`);
         return;
       }
 
       // Ищем первое pending напоминание для этой последовательности
       const firstPending = await getFirstPendingReminder(scheduleId);
       if (!firstPending) {
-        console.log(`⏭️ Нет pending напоминаний для расписания ${scheduleId}`);
+        logger.debug(`No pending reminders for schedule ${scheduleId}`);
         return;
       }
 
-      console.log(`📤 Отправка последовательного напоминания ${firstPending.id} для расписания ${scheduleId}`);
       await sendSequentialReminder(bot, firstPending);
     } else {
       // Обычный режим - создаем новое напоминание
@@ -171,7 +168,7 @@ async function sendReminder(bot: Bot<MyContext>, scheduleId: string, userId: str
       await sendStandardReminder(bot, reminder, time, schedule);
     }
   } catch (error) {
-    console.error('❌ Ошибка при отправке напоминания:', error);
+    logger.error(`Error sending reminder: ${error}`);
   }
 }
 
@@ -192,7 +189,7 @@ function scheduleRetry(bot: Bot<MyContext>, reminderId: string, userId: string, 
       if (reminder.retryCount >= MAX_RETRIES) {
         await markReminderAsMissed(reminderId);
         cancelRetry(reminderId);
-        console.log(`⏭️  Напоминание ${reminderId} пропущено после ${MAX_RETRIES} попыток`);
+        logger.warn(`Reminder ${reminderId} skipped after ${MAX_RETRIES} retries`);
         return;
       }
       
@@ -217,9 +214,9 @@ function scheduleRetry(bot: Bot<MyContext>, reminderId: string, userId: string, 
       
       scheduleRetry(bot, reminderId, userId, chatId, reminder.retryCount);
       
-      console.log(`🔁 Отправлено повторное напоминание ${reminderId} (попытка ${reminder.retryCount}) в ${currentTime}`);
+      logger.debug(`Retry sent for reminder ${reminderId} (attempt ${reminder.retryCount}) at ${currentTime}`);
     } catch (error) {
-      console.error('❌ Ошибка при повторной отправке напоминания:', error);
+      logger.error(`Error retrying reminder: ${error}`);
     }
   }, RETRY_INTERVAL_MS);
   
@@ -237,12 +234,12 @@ export function cancelRetry(reminderId: string) {
 async function sendStandardReminder(bot: Bot<MyContext>, reminder: any, scheduledTime: string, schedule: any) {
   // Validate schedule data
   if (!hasValidChatId(schedule)) {
-    console.error(`❌ Расписание не содержит chatId для напоминания ${reminder.id}`);
+    logger.error(`Schedule missing chatId for reminder ${reminder.id}`);
     return;
   }
 
   if (!schedule.userId) {
-    console.error(`❌ Расписание не содержит userId для напоминания ${reminder.id}`);
+    logger.error(`Schedule missing userId for reminder ${reminder.id}`);
     return;
   }
 
@@ -260,25 +257,25 @@ async function sendStandardReminder(bot: Bot<MyContext>, reminder: any, schedule
 
   scheduleRetry(bot, reminder.id, schedule.userId.toString(), BigInt(schedule.chatId), 0);
 
-  console.log(`📨 Отправлено стандартное напоминание ${reminder.id} пользователю ${schedule.userId} в ${currentTime}`);
+  logger.debug(`Standard reminder ${reminder.id} sent to user ${schedule.userId} at ${currentTime}`);
 }
 
 async function sendSequentialReminder(bot: Bot<MyContext>, reminder: any) {
-  console.log(`📤 Отправка последовательного напоминания ${reminder.id} со статусом ${reminder.status}`);
+  logger.debug(`Sending sequential reminder ${reminder.id} with status ${reminder.status}`);
 
   // Validate reminder has schedule data
   if (!hasValidSchedule(reminder)) {
-    console.error(`❌ Напоминание ${reminder.id} не содержит данных о расписании или chatId`);
+    logger.error(`Reminder ${reminder.id} missing schedule data or chatId`);
     return;
   }
 
   if (!reminder.id) {
-    console.error(`❌ Напоминание не содержит id`);
+    logger.error('Reminder missing id');
     return;
   }
 
   if (!reminder.schedule.userId) {
-    console.error(`❌ Напоминание ${reminder.id} не содержит userId в расписании`);
+    logger.error(`Reminder ${reminder.id} missing userId in schedule`);
     return;
   }
 
@@ -296,14 +293,14 @@ async function sendSequentialReminder(bot: Bot<MyContext>, reminder: any) {
 
   scheduleRetry(bot, reminder.id, reminder.schedule.userId.toString(), BigInt(reminder.schedule.chatId), 0);
 
-  console.log(`📨 Отправлено последовательное напоминание ${reminder.id} (порядок: ${reminder.sequenceOrder || 0}) пользователю ${reminder.schedule.userId} в ${currentTime}`);
+  logger.debug(`Sequential reminder ${reminder.id} (order: ${reminder.sequenceOrder || 0}) sent to user ${reminder.schedule.userId} at ${currentTime}`);
 }
 
 export async function scheduleNextSequentialReminder(
   bot: Bot<MyContext>,
   confirmedReminderId: string
 ) {
-  console.log(`🔄 Планирование следующего последовательного напоминания после подтверждения ${confirmedReminderId}`);
+  logger.debug(`Scheduling next sequential reminder after confirmation ${confirmedReminderId}`);
 
   try {
     // Используем транзакцию для предотвращения race conditions
@@ -341,7 +338,7 @@ export async function scheduleNextSequentialReminder(
       });
 
       if (!nextReminder) {
-        console.log(`✅ Последовательность для расписания ${confirmedReminder.scheduleId} завершена`);
+        logger.debug(`Sequence completed for schedule ${confirmedReminder.scheduleId}`);
         return null;
       }
 
@@ -369,7 +366,7 @@ export async function scheduleNextSequentialReminder(
     const nextScheduledTime = schedule.times[nextReminder.sequenceOrder];
 
     if (!currentScheduledTime || !nextScheduledTime) {
-      console.error(`❌ Не найдено время для sequenceOrder ${confirmedReminder.sequenceOrder} или ${nextReminder.sequenceOrder} в расписании ${schedule.id}`);
+      logger.error(`Time not found for sequenceOrder ${confirmedReminder.sequenceOrder} or ${nextReminder.sequenceOrder} in schedule ${schedule.id}`);
       await prisma.reminder.update({
         where: { id: nextReminder.id },
         data: { status: 'pending' } // Возвращаем в pending, т.к. не смогли обработать
@@ -393,35 +390,22 @@ export async function scheduleNextSequentialReminder(
     // Применяем минимальную задержку 1 минута
     const minDelayMs = MIN_SEQUENTIAL_DELAY_MS;
     if (delayMs > 0 && delayMs < minDelayMs) {
-      console.log(`   ⏰ Применяем минимальную задержку: ${Math.floor(minDelayMs / 1000)} сек`);
+      logger.debug(`Applying minimum delay: ${Math.floor(minDelayMs / 1000)}s`);
       delayMs = minDelayMs;
       nextNotificationTime = new Date(now.getTime() + minDelayMs);
     }
 
-    console.log(`⏰ Расчет времени для последовательного режима:`);
-    console.log(`   📅 Предыдущее время: ${currentScheduledTime}`);
-    console.log(`   📅 Следующее время: ${nextScheduledTime}`);
-    console.log(`   ✅ Время подтверждения: ${confirmedReminder.actualConfirmedAt!.toLocaleTimeString()}`);
-    console.log(`   📊 Задержка предыдущего: ${currentDelay} мин`);
-    console.log(`   📊 Ограниченная задержка: ${cappedDelay} мин (макс: ${maxDelay})`);
-    console.log(`   📅 Расчетное время (изначальное): ${new Date(confirmedReminder.actualConfirmedAt!.getTime() + (nextNotificationTime.getTime() - confirmedReminder.actualConfirmedAt!.getTime() - delayMs)).toLocaleTimeString()}`);
-    console.log(`   📅 Финальное время: ${nextNotificationTime.toLocaleTimeString()}`);
-    console.log(`   📅 Текущее время: ${now.toLocaleTimeString()}`);
-    console.log(`   ⏱️  Задержка отправки: ${Math.floor(delayMs / 1000)} сек`);
-
     if (delayMs <= 0) {
       // Если время уже прошло, отправляем сразу
-      console.log(`   🚀 Отправка сразу (время уже прошло)`);
+      logger.debug(`Sending immediately (time already passed)`);
       await sendSequentialReminder(bot, nextReminder);
     } else {
       // Планируем отложенную отправку
-      console.log(`   ⏳ Планирование отложенной отправки`);
       const timeout = setTimeout(async () => {
         try {
-          console.log(`   ⏰ Отложенное напоминание ${nextReminder.id} готово к отправке`);
           await sendSequentialReminder(bot, nextReminder);
         } catch (error) {
-          console.error('❌ Ошибка при отправке отложенного напоминания:', error);
+          logger.error(`Error sending delayed reminder: ${error}`);
           // Возвращаем в pending статус при ошибке
           await prisma.reminder.update({
             where: { id: nextReminder.id },
@@ -431,12 +415,11 @@ export async function scheduleNextSequentialReminder(
       }, delayMs);
 
       setDelayedTaskWithCleanup(`${schedule.id}-${nextReminder.sequenceOrder}`, timeout);
-
       const delayDescription = getDelayDescription(Math.floor(delayMs / (1000 * 60)));
-      console.log(`⏰ Запланировано следующее напоминание ${nextReminder.id} через ${delayDescription} в ${nextNotificationTime.toLocaleTimeString()}`);
+      logger.debug(`Scheduled next reminder ${nextReminder.id} in ${delayDescription} at ${nextNotificationTime.toLocaleTimeString()}`);
     }
   } catch (error) {
-    console.error('❌ Ошибка при планировании следующего последовательного напоминания:', error);
+    logger.error(`Error scheduling next sequential reminder: ${error}`);
   }
 }
 
@@ -468,5 +451,5 @@ export function stopAllTasks() {
 
   taskTimestamps.clear();
 
-  console.log('🛑 Все задачи остановлены');
+  logger.info('All cron tasks stopped');
 }

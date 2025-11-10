@@ -10,6 +10,7 @@ import { addQuestionConversation } from './conversations/addQuestion';
 import { createQuizConversation } from './conversations/createQuiz';
 import { quizListMenu, adminMainMenu } from './menus/quizMenus';
 import { MyContext, SessionData } from './types/context';
+import { logger } from './utils/logger';
 
 const bot = new Bot<MyContext>(config.botToken);
 setBotInstance(bot);
@@ -157,27 +158,26 @@ bot.on('message:text', async (ctx) => {
 async function start() {
   try {
     await prisma.$connect();
-    console.log('✅ Подключено к базе данных');
-    
+
     await initializeScheduler(bot);
-    
+
     bot.start();
-    console.log('✅ Бот запущен');
+    logger.info('Bot started successfully');
   } catch (error) {
-    console.error('❌ Ошибка при запуске:', error);
+    logger.error(`Error starting bot: ${error}`);
     process.exit(1);
   }
 }
 
 process.on('SIGINT', async () => {
-  console.log('\n⏹️  Остановка бота...');
+  logger.info('Shutting down bot...');
   stopAllTasks();
   await prisma.$disconnect();
   process.exit(0);
 });
 
 process.on('SIGTERM', async () => {
-  console.log('\n⏹️  Остановка бота...');
+  logger.info('Shutting down bot...');
   stopAllTasks();
   await prisma.$disconnect();
   process.exit(0);

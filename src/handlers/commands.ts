@@ -8,6 +8,7 @@ import {getBotInstance} from '../lib/bot';
 import {isAdmin} from '../middleware/isAdmin';
 import {createTemplate, deleteTemplate, getAllTemplates} from '../services/templateService';
 import {config} from '../config';
+import {logger} from '../utils/logger';
 import {
     createQuiz,
     deleteQuiz,
@@ -953,7 +954,7 @@ async function handleImportQuizDocument(ctx: Context) {
         const jsonText = await response.text();
         const jsonData = JSON.parse(jsonText);
 
-        console.log('Parsed JSON data:', JSON.stringify(jsonData, null, 2));
+        logger.debug(`Parsed JSON data: ${JSON.stringify(jsonData, null, 2)}`);
 
         const result = await importQuizFromJson(jsonData, BigInt(telegramId));
 
