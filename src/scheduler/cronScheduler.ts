@@ -377,7 +377,7 @@ export async function scheduleNextSequentialReminder(
       return;
     }
 
-    const nextNotificationTime = calculateNextSequentialNotificationTime(
+    let nextNotificationTime = calculateNextSequentialNotificationTime(
       currentScheduledTime,
       nextScheduledTime,
       confirmedReminder.actualConfirmedAt!,

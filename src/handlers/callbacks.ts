@@ -19,6 +19,7 @@ export function registerCallbacks(bot: Bot<MyContext>) {
   bot.callbackQuery(/^settings_sequential:(.+)$/, handleSettingsSequential);
   bot.callbackQuery(/^settings_delay:(.+)$/, handleSettingsDelay);
   bot.callbackQuery(/^settings_back$/, handleSettingsBack);
+  bot.callbackQuery(/^settings_close$/, handleSettingsClose);
 }
 async function handleConfirmReminder(ctx: MyContext) {
   const match = ctx.callbackQuery?.data?.match(/^confirm_reminder:(.+)$/);
@@ -485,7 +486,7 @@ async function handleSettingsSequential(ctx: MyContext) {
     }
 
     await ctx.answerCallbackQuery({ text: `✅ Режим ${isEnabled ? 'включен' : 'выключен'}` });
-    await showSettingsMenu(ctx);
+    await showSettingsMenu(ctx, true); // Редактируем сообщение вместо создания нового
   } catch (error) {
     console.error('Ошибка при обновлении режима последовательности:', error);
     await ctx.answerCallbackQuery({ text: 'Произошла ошибка' });
@@ -510,7 +511,7 @@ async function handleSettingsDelay(ctx: MyContext) {
     await updateUserByTelegramId(BigInt(userId), { maxDelayMinutes: delayMinutes });
     await ctx.answerCallbackQuery({ text: `✅ Максимальная задержка установлена: ${getDelayDescription(delayMinutes)}` });
 
-    await showSettingsMenu(ctx);
+    await showSettingsMenu(ctx, true); // Редактируем сообщение вместо создания нового
   } catch (error) {
     console.error('Ошибка при обновлении максимальной задержки:', error);
 
@@ -530,10 +531,29 @@ async function handleSettingsBack(ctx: MyContext) {
   await showSettingsMenu(ctx);
 }
 
-export async function showSettingsMenu(ctx: MyContext) {
+async function handleSettingsClose(ctx: MyContext) {
+  await ctx.answerCallbackQuery();
+
+  try {
+    await ctx.deleteMessage();
+  } catch (error) {
+    console.error('Ошибка при удалении сообщения с настройками:', error);
+    // Если не удалось удалить сообщение, пробуем отредактировать его
+    try {
+      await ctx.editMessageText('⚙️ Настройки закрыты');
+    } catch (editError) {
+      console.error('Ошибка при редактировании сообщения:', editError);
+    }
+  }
+}
+
+export async function showSettingsMenu(ctx: MyContext, isEdit: boolean = false) {
   const userId = ctx.from?.id;
 
   if (!userId) {
+    if (isEdit && ctx.callbackQuery?.message) {
+      return ctx.editMessageText('Ошибка: не удалось получить ваш ID');
+    }
     return ctx.reply('Ошибка: не удалось получить ваш ID');
   }
 
@@ -568,12 +588,27 @@ export async function showSettingsMenu(ctx: MyContext) {
       }
     }
 
-    await ctx.reply(message, {
+    // Добавляем кнопку закрытия
+    keyboard.text('❌ Закрыть', 'settings_close');
+
+    const replyOptions = {
       reply_markup: keyboard,
-      parse_mode: 'Markdown',
-    });
+      parse_mode: 'Markdown' as const,
+    };
+
+    if (isEdit && ctx.callbackQuery?.message) {
+      await ctx.editMessageText(message, replyOptions);
+    } else {
+      await ctx.reply(message, replyOptions);
+    }
   } catch (error) {
     console.error('Ошибка при отображении настроек:', error);
-    await ctx.reply('Произошла ошибка при загрузке настроек');
+    const errorMessage = 'Произошла ошибка при загрузке настроек';
+
+    if (isEdit && ctx.callbackQuery?.message) {
+      await ctx.editMessageText(errorMessage);
+    } else {
+      await ctx.reply(errorMessage);
+    }
   }
 }
