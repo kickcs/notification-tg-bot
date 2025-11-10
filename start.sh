@@ -32,7 +32,7 @@ log_error() {
 # Configuration
 MAX_MIGRATION_ATTEMPTS=3
 MIGRATION_TIMEOUT=300  # 5 minutes
-STARTUP_TIMEOUT=60     # 1 minute
+STARTUP_TIMEOUT=0      # No timeout - run indefinitely
 
 log "🚀 Starting Telegram Bot with smart migration support..."
 
@@ -146,9 +146,14 @@ start_application() {
 
     log_success "Prisma client generated"
 
-    # Start the application with timeout
-    timeout $STARTUP_TIMEOUT node dist/index.js &
-    local app_pid=$!
+    # Start the application (no timeout for production)
+    if [ "$STARTUP_TIMEOUT" -eq 0 ]; then
+        node dist/index.js &
+        local app_pid=$!
+    else
+        timeout $STARTUP_TIMEOUT node dist/index.js &
+        local app_pid=$!
+    fi
 
     # Wait a bit to check if application starts successfully
     sleep 5
