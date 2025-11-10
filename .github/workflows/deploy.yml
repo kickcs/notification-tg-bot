@@ -55,7 +55,7 @@ jobs:
       - name: Validate Prisma schema
         run: |
           echo "🔍 Validating Prisma schema..."
-          npx prisma validate || {
+          DATABASE_URL="postgresql://postgres:postgres@localhost:5432/test_db" npx prisma validate || {
             echo "❌ Prisma schema validation failed"
             exit 1
           }
@@ -116,7 +116,7 @@ jobs:
 
           # Validate database schema
           echo "🔍 Validating database schema..."
-          npx prisma db push --accept-data-loss || {
+          DATABASE_URL="postgresql://postgres:postgres@localhost:5432/test_db" npx prisma db push --accept-data-loss || {
             echo "❌ Database schema validation failed"
             exit 1
           }
