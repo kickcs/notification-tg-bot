@@ -7,7 +7,7 @@ import { MyContext } from '../types/context';
 import { config } from '../config';
 import { QuizAnswer } from '../types/quiz';
 import { calculateDelayAmount, getDelayDescription } from '../utils/timeUtils';
-import { getUserMaxDelay, updateUserByTelegramId, getUserSettings, InvalidDelayError } from '../services/userService';
+import { getUserMaxDelay, updateUserByTelegramId, getUserSettings, getUserByTelegramId, InvalidDelayError } from '../services/userService';
 import { getBotInstance } from '../lib/bot';
 
 export function registerCallbacks(bot: Bot<MyContext>) {
@@ -525,7 +525,7 @@ export async function showSettingsMenu(ctx: MyContext) {
   }
 
   try {
-    const settings = await getUserSettings(userId.toString());
+    const settings = await getUserByTelegramId(BigInt(userId));
 
     let message = '⚙️ *Настройки уведомлений*\n\n';
     message += `🔗 *Последовательный режим:* ${settings.sequentialMode ? '✅ Включен' : '❌ Выключен'}\n`;

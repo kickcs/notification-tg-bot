@@ -22,6 +22,7 @@ import {
   getDelayDescription
 } from '../utils/timeUtils';
 import { MyContext } from '../types/context';
+import { hasValidSchedule, hasValidChatId, chatIdToString } from '../utils/idUtils';
 import { getUserMaxDelay } from '../services/userService';
 
 const tasks = new Map<string, cron.ScheduledTask>();
@@ -156,7 +157,7 @@ async function sendReminder(bot: Bot<MyContext>, scheduleId: string, userId: str
       // Обычный режим - создаем новое напоминание
       const sequenceOrder = schedule.times.indexOf(time);
       const reminder = await createReminder(scheduleId, sequenceOrder);
-      await sendStandardReminder(bot, reminder, time);
+      await sendStandardReminder(bot, reminder, time, schedule);
     }
   } catch (error) {
     console.error('❌ Ошибка при отправке напоминания:', error);
@@ -186,7 +187,7 @@ function scheduleRetry(bot: Bot<MyContext>, reminderId: string, userId: string, 
       
       if (reminder.messageId) {
         try {
-          await bot.api.deleteMessage(chatId.toString(), reminder.messageId);
+          await bot.api.deleteMessage(chatIdToString(chatId), reminder.messageId);
         } catch (deleteError) {
           console.warn(`⚠️  Не удалось удалить предыдущее сообщение ${reminder.messageId}:`, deleteError);
         }
@@ -197,7 +198,7 @@ function scheduleRetry(bot: Bot<MyContext>, reminderId: string, userId: string, 
       const message = `🔔 Повторное напоминание:\n\n[${currentTime}] ${templateMessage}`;
       const keyboard = new InlineKeyboard().text('✅ Подтвердить', `confirm_reminder:${reminderId}`);
       
-      const sentMessage = await bot.api.sendMessage(chatId.toString(), message, {
+      const sentMessage = await bot.api.sendMessage(chatIdToString(chatId), message, {
         reply_markup: keyboard,
       });
       
@@ -222,40 +223,67 @@ export function cancelRetry(reminderId: string) {
   }
 }
 
-async function sendStandardReminder(bot: Bot<MyContext>, reminder: any, scheduledTime: string) {
+async function sendStandardReminder(bot: Bot<MyContext>, reminder: any, scheduledTime: string, schedule: any) {
+  // Validate schedule data
+  if (!hasValidChatId(schedule)) {
+    console.error(`❌ Расписание не содержит chatId для напоминания ${reminder.id}`);
+    return;
+  }
+
+  if (!schedule.userId) {
+    console.error(`❌ Расписание не содержит userId для напоминания ${reminder.id}`);
+    return;
+  }
+
   const templateMessage = await getRandomTemplate('reminder');
   const currentTime = getCurrentTimeFormatted();
   const message = `[${currentTime}] ${templateMessage}`;
 
   const keyboard = new InlineKeyboard().text('✅ Подтвердить', `confirm_reminder:${reminder.id}`);
 
-  const sentMessage = await bot.api.sendMessage(reminder.schedule.chatId.toString(), message, {
+  const sentMessage = await bot.api.sendMessage(chatIdToString(schedule.chatId), message, {
     reply_markup: keyboard,
   });
 
   await updateReminderMessageId(reminder.id, sentMessage.message_id);
 
-  scheduleRetry(bot, reminder.id, reminder.schedule.userId.toString(), reminder.schedule.chatId, 0);
+  scheduleRetry(bot, reminder.id, schedule.userId.toString(), BigInt(schedule.chatId), 0);
 
-  console.log(`📨 Отправлено стандартное напоминание ${reminder.id} пользователю ${reminder.schedule.userId} в ${currentTime}`);
+  console.log(`📨 Отправлено стандартное напоминание ${reminder.id} пользователю ${schedule.userId} в ${currentTime}`);
 }
 
 async function sendSequentialReminder(bot: Bot<MyContext>, reminder: any) {
+  // Validate reminder has schedule data
+  if (!hasValidSchedule(reminder)) {
+    console.error(`❌ Напоминание ${reminder.id} не содержит данных о расписании или chatId`);
+    return;
+  }
+
+  if (!reminder.id) {
+    console.error(`❌ Напоминание не содержит id`);
+    return;
+  }
+
+  if (!reminder.schedule.userId) {
+    console.error(`❌ Напоминание ${reminder.id} не содержит userId в расписании`);
+    return;
+  }
+
   const templateMessage = await getRandomTemplate('reminder');
   const currentTime = getCurrentTimeFormatted();
   const message = `[${currentTime}] ${templateMessage}`;
 
   const keyboard = new InlineKeyboard().text('✅ Подтвердить', `confirm_reminder:${reminder.id}`);
 
-  const sentMessage = await bot.api.sendMessage(reminder.schedule.chatId.toString(), message, {
+  const sentMessage = await bot.api.sendMessage(chatIdToString(reminder.schedule.chatId), message, {
     reply_markup: keyboard,
   });
 
   await updateReminderMessageId(reminder.id, sentMessage.message_id);
 
-  scheduleRetry(bot, reminder.id, reminder.schedule.userId.toString(), reminder.schedule.chatId, 0);
+  scheduleRetry(bot, reminder.id, reminder.schedule.userId.toString(), BigInt(reminder.schedule.chatId), 0);
 
-  console.log(`📨 Отправлено последовательное напоминание ${reminder.id} (порядок: ${reminder.sequenceOrder}) пользователю ${reminder.schedule.userId} в ${currentTime}`);
+  console.log(`📨 Отправлено последовательное напоминание ${reminder.id} (порядок: ${reminder.sequenceOrder || 0}) пользователю ${reminder.schedule.userId} в ${currentTime}`);
 }
 
 export async function scheduleNextSequentialReminder(

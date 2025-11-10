@@ -10,26 +10,26 @@ jobs:
   pre-deploy-checks:
     name: Pre-Deploy Checks
     runs-on: ubuntu-latest
-    
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-      
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '18'
           cache: 'npm'
-      
+
       - name: Install dependencies
         run: npm ci
-      
+
       - name: Generate Prisma Client
         run: npx prisma generate
-      
+
       - name: Build TypeScript
         run: npm run build
-      
+
       - name: Check build artifacts
         run: |
           if [ ! -d "dist" ]; then
@@ -38,9 +38,93 @@ jobs:
           fi
           echo "✅ Build successful"
 
+      - name: Check migration files
+        run: |
+          echo "🔍 Checking migration files..."
+          if [ ! -d "prisma/migrations" ]; then
+            echo "❌ No migrations directory found"
+            exit 1
+          fi
+          if [ -z "$(ls -A prisma/migrations)" ]; then
+            echo "⚠️  Migration directory is empty"
+          else
+            echo "✅ Migration files found"
+            ls -la prisma/migrations/
+          fi
+
+      - name: Validate Prisma schema
+        run: |
+          echo "🔍 Validating Prisma schema..."
+          npx prisma validate || {
+            echo "❌ Prisma schema validation failed"
+            exit 1
+          }
+          echo "✅ Prisma schema is valid"
+
+  migration-check:
+    name: Migration Validation
+    runs-on: ubuntu-latest
+    needs: pre-deploy-checks
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_USER: postgres
+          POSTGRES_DB: test_db
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma Client
+        run: npx prisma generate
+
+      - name: Setup test database
+        run: |
+          echo "🔧 Setting up test database..."
+          export DATABASE_URL="postgresql://postgres:postgres@localhost:5432/test_db?schema=public"
+
+          # Apply migrations to test database
+          if [ -d "prisma/migrations" ] && [ "$(ls -A prisma/migrations)" ]; then
+            echo "🔄 Applying migrations to test database..."
+            npx prisma migrate deploy || {
+              echo "❌ Migration deployment failed on test database"
+              exit 1
+            }
+            echo "✅ Migrations applied successfully"
+          else
+            echo "⚠️  No migrations to apply"
+          fi
+
+          # Validate database schema
+          echo "🔍 Validating database schema..."
+          npx prisma db push --accept-data-loss || {
+            echo "❌ Database schema validation failed"
+            exit 1
+          }
+          echo "✅ Database schema is valid"
+
   deploy:
     name: Deploy to VDS
-    needs: pre-deploy-checks
+    needs: migration-check
     runs-on: ubuntu-latest
     
     steps:
@@ -80,4 +164,16 @@ jobs:
               echo "📋 Recent logs:"
               docker compose -f docker-compose.prod.yml logs --tail=50 bot
               exit 1
+            fi
+            echo ""
+            echo "🗄️  Checking migration status..."
+            # Проверяем статус миграций
+            MIGRATION_STATUS=$(docker compose -f docker-compose.prod.yml exec -T bot ./scripts/migration-health.sh 2>/dev/null || echo "MIGRATION_CHECK_FAILED")
+            if [[ "$MIGRATION_STATUS" == *"completed successfully"* ]]; then
+              echo "✅ Database migrations are up to date"
+            else
+              echo "⚠️  Migration status check failed or migrations needed"
+              echo "Status: $MIGRATION_STATUS"
+              echo "📋 Migration logs:"
+              docker compose -f docker-compose.prod.yml logs --tail=20 bot | grep -i migration || echo "No migration logs found"
             fi

@@ -1,6 +1,10 @@
 FROM node:18-slim AS base
 
-RUN apt-get update && apt-get install -y openssl ca-certificates && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y \
+    openssl \
+    ca-certificates \
+    postgresql-client \
+    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
@@ -26,9 +30,13 @@ ENV NODE_ENV=production
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist
 COPY --from=build /app/prisma ./prisma
+COPY --from=build /app/scripts ./scripts
 COPY package*.json ./
 COPY start.sh ./
-RUN chmod +x start.sh
+RUN chmod +x start.sh scripts/*.sh scripts/wait-for-it.sh scripts/migration-*.sh scripts/restore-from-backup.sh
+
+# Create backups directory
+RUN mkdir -p /app/backups
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
   CMD node -e "require('child_process').exec('ps aux | grep \"node dist/index.js\" | grep -v grep', (err, stdout) => { if (!stdout) process.exit(1); })"

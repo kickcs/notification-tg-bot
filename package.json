@@ -9,11 +9,19 @@
     "start": "node dist/index.js",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
+    "prisma:migrate:prod": "prisma migrate deploy",
+    "prisma:status": "prisma migrate status",
+    "prisma:rollback": "prisma migrate reset --force",
     "prisma:studio": "prisma studio",
     "prisma:seed": "tsx prisma/seed.ts",
     "docker:up": "docker-compose up -d",
     "docker:down": "docker-compose down",
-    "docker:logs": "docker-compose logs -f"
+    "docker:logs": "docker-compose logs -f",
+    "migration:check": "./scripts/migration-health.sh",
+    "migration:deploy": "./scripts/deploy-migration.sh",
+    "migration:backup": "./scripts/backup-before-migration.sh",
+    "migration:monitor": "./scripts/migration-monitor.sh",
+    "migration:restore": "./scripts/restore-from-backup.sh"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
