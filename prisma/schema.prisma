@@ -15,7 +15,7 @@ model User {
   lastName          String?
   chatId            BigInt?
   customStatus      String?
-  maxDelayMinutes   Int      @default(60)
+  maxDelayMinutes   Int      @default(240)
   sequentialMode    Boolean  @default(false)
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt

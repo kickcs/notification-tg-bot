@@ -556,7 +556,7 @@ export async function showSettingsMenu(ctx: MyContext) {
     keyboard.row();
 
     // Кнопки для максимальной задержки
-    const delayOptions = [15, 30, 60, 120];
+    const delayOptions = [15, 30, 60, 120, 240];
     for (const delay of delayOptions) {
       const isActive = delay === settings.maxDelayMinutes;
       const prefix = isActive ? '🔘' : '⚪';
