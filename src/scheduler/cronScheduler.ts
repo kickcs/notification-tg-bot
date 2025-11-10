@@ -145,14 +145,10 @@ async function sendReminder(bot: Bot<MyContext>, scheduleId: string, userId: str
     console.log(`📋 Расписание ${scheduleId} found. useSequentialDelay: ${schedule.useSequentialDelay}, sequentialMode: ${schedule.user.sequentialMode}`);
 
     if (schedule.useSequentialDelay) {
-      // Проверяем есть ли любые неподтвержденные напоминания (включая отправленные но не подтвержденные)
-      const hasUnconfirmed = await hasUnconfirmedReminders(scheduleId);
-      if (hasUnconfirmed) {
-        const hasSentButNotConfirmed = await hasSentButUnconfirmedReminders(scheduleId);
-        const statusMessage = hasSentButNotConfirmed
-          ? 'есть отправленные но неподтвержденные напоминания'
-          : 'есть неподтвержденные напоминания в обработке';
-        console.log(`⏭️ Пропуск отправки для расписания ${scheduleId} - ${statusMessage}`);
+      // В последовательном режиме проверяем только ОТПРАВЛЕННЫЕ но неподтвержденные напоминания
+      const hasSentButNotConfirmed = await hasSentButUnconfirmedReminders(scheduleId);
+      if (hasSentButNotConfirmed) {
+        console.log(`⏭️ Пропуск отправки для расписания ${scheduleId} - есть отправленные но неподтвержденные напоминания`);
         return;
       }
 
