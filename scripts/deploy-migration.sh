@@ -93,7 +93,11 @@ if npx prisma migrate deploy; then
 
     # Verify migration was successful
     log "Verifying migration success..."
-    if npx prisma migrate status | grep -q "Database is up to date"; then
+    # Store migration status for debugging
+    MIGRATION_STATUS_OUTPUT=$(npx prisma migrate status 2>&1)
+
+    # Check for multiple possible success patterns
+    if echo "$MIGRATION_STATUS_OUTPUT" | grep -q -i -E "(Database is up to date|No pending migrations to apply|Already up to date| migrations are up to date)"; then
         log_success "Migration verification successful"
 
         # Test database operations
@@ -105,6 +109,8 @@ if npx prisma migrate deploy; then
         fi
     else
         log_error "Migration verification failed"
+        log_error "Expected pattern not found in migration status output:"
+        log_error "$MIGRATION_STATUS_OUTPUT"
         exit 1
     fi
 else
