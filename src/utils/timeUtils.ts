@@ -37,8 +37,8 @@ export function calculateDelayAmount(actualConfirmedAt: Date, scheduledTime: str
   const scheduledDate = new Date();
   scheduledDate.setHours(hours, minutes, 0, 0);
 
-  // Если scheduledTime в прошлом относительно текущего дня, добавляем день
-  if (scheduledDate < actualConfirmedAt && scheduledDate.toDateString() === actualConfirmedAt.toDateString()) {
+  // Если scheduledTime в прошлом относительно фактического времени подтверждения, добавляем день
+  if (scheduledDate < actualConfirmedAt) {
     scheduledDate.setDate(scheduledDate.getDate() + 1);
   }
 
@@ -68,6 +68,21 @@ export function calculateNextNotificationTime(
   const cappedDelay = Math.min(actualDelay, maxDelayMinutes);
 
   return addDelayToTime(scheduledTime, cappedDelay);
+}
+
+// Новая функция для расчета времени следующего уведомления в последовательном режиме
+export function calculateNextSequentialNotificationTime(
+  previousScheduledTime: string,
+  nextScheduledTime: string,
+  actualConfirmedAt: Date,
+  maxDelayMinutes: number
+): Date {
+  // Рассчитываем задержку предыдущего уведомления
+  const previousDelay = calculateDelayAmount(actualConfirmedAt, previousScheduledTime);
+  const cappedDelay = Math.min(previousDelay, maxDelayMinutes);
+
+  // Добавляем эту же задержку ко времени следующего уведомления
+  return addDelayToTime(nextScheduledTime, cappedDelay);
 }
 
 export function isTimeWithinMaxDelay(

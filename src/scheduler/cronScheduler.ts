@@ -21,6 +21,7 @@ import {
   getCurrentTimeFormatted,
   calculateDelayAmount,
   calculateNextNotificationTime,
+  calculateNextSequentialNotificationTime,
   getDelayDescription
 } from '../utils/timeUtils';
 import { MyContext } from '../types/context';
@@ -362,10 +363,11 @@ export async function scheduleNextSequentialReminder(
     const { reminder: nextReminder, schedule, confirmedReminder } = result;
 
     const maxDelay = await getUserMaxDelay(schedule.user.telegramId);
-    const scheduledTime = schedule.times[nextReminder.sequenceOrder];
+    const currentScheduledTime = schedule.times[confirmedReminder.sequenceOrder];
+    const nextScheduledTime = schedule.times[nextReminder.sequenceOrder];
 
-    if (!scheduledTime) {
-      console.error(`❌ Не найдено время для sequenceOrder ${nextReminder.sequenceOrder} в расписании ${schedule.id}`);
+    if (!currentScheduledTime || !nextScheduledTime) {
+      console.error(`❌ Не найдено время для sequenceOrder ${confirmedReminder.sequenceOrder} или ${nextReminder.sequenceOrder} в расписании ${schedule.id}`);
       await prisma.reminder.update({
         where: { id: nextReminder.id },
         data: { status: 'pending' } // Возвращаем в pending, т.к. не смогли обработать
@@ -373,8 +375,9 @@ export async function scheduleNextSequentialReminder(
       return;
     }
 
-    const nextNotificationTime = calculateNextNotificationTime(
-      scheduledTime,
+    const nextNotificationTime = calculateNextSequentialNotificationTime(
+      currentScheduledTime,
+      nextScheduledTime,
       confirmedReminder.actualConfirmedAt!,
       maxDelay
     );
