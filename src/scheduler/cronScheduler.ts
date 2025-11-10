@@ -36,6 +36,7 @@ const delayedTasks = new Map<string, NodeJS.Timeout>();
 const RETRY_INTERVAL_MS = 15 * 60 * 1000;
 const MAX_RETRIES = 3;
 const MAX_DELAYED_TASKS = 1000; // Предотвращение memory leak
+const MIN_SEQUENTIAL_DELAY_MS = 1 * 60 * 1000; // 1 минута минимальная задержка между подтверждением и следующим уведомлением
 
 // Task cleanup management
 const taskTimestamps = new Map<string, number>();
@@ -387,7 +388,15 @@ export async function scheduleNextSequentialReminder(
     const currentDelay = calculateSequentialDelay(confirmedReminder.actualConfirmedAt!, currentScheduledTime);
     const cappedDelay = Math.min(currentDelay, maxDelay);
     const now = new Date();
-    const delayMs = nextNotificationTime.getTime() - now.getTime();
+    let delayMs = nextNotificationTime.getTime() - now.getTime();
+
+    // Применяем минимальную задержку 1 минута
+    const minDelayMs = MIN_SEQUENTIAL_DELAY_MS;
+    if (delayMs > 0 && delayMs < minDelayMs) {
+      console.log(`   ⏰ Применяем минимальную задержку: ${Math.floor(minDelayMs / 1000)} сек`);
+      delayMs = minDelayMs;
+      nextNotificationTime = new Date(now.getTime() + minDelayMs);
+    }
 
     console.log(`⏰ Расчет времени для последовательного режима:`);
     console.log(`   📅 Предыдущее время: ${currentScheduledTime}`);
@@ -395,7 +404,8 @@ export async function scheduleNextSequentialReminder(
     console.log(`   ✅ Время подтверждения: ${confirmedReminder.actualConfirmedAt!.toLocaleTimeString()}`);
     console.log(`   📊 Задержка предыдущего: ${currentDelay} мин`);
     console.log(`   📊 Ограниченная задержка: ${cappedDelay} мин (макс: ${maxDelay})`);
-    console.log(`   📅 Расчетное время: ${nextNotificationTime.toLocaleTimeString()}`);
+    console.log(`   📅 Расчетное время (изначальное): ${new Date(confirmedReminder.actualConfirmedAt!.getTime() + (nextNotificationTime.getTime() - confirmedReminder.actualConfirmedAt!.getTime() - delayMs)).toLocaleTimeString()}`);
+    console.log(`   📅 Финальное время: ${nextNotificationTime.toLocaleTimeString()}`);
     console.log(`   📅 Текущее время: ${now.toLocaleTimeString()}`);
     console.log(`   ⏱️  Задержка отправки: ${Math.floor(delayMs / 1000)} сек`);
 
