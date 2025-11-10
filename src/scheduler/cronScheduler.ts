@@ -343,13 +343,13 @@ export async function scheduleNextSequentialReminder(
       }
 
       // Помечаем как "processing" для предотвращения дублирования
-      const updatedReminder = await tx.reminder.update({
+      await tx.reminder.update({
         where: { id: nextReminder.id },
         data: { status: 'processing' }
       });
 
       return {
-        reminder: updatedReminder,
+        reminder: nextReminder, // Возвращаем полный nextReminder с данными расписания
         schedule: nextReminder.schedule,
         confirmedReminder
       };
