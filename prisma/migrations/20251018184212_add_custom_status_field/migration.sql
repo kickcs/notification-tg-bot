@@ -1,1 +1,3 @@
-ALTER TABLE "users" ADD COLUMN "customStatus" TEXT;
+-- This migration is now redundant since the customStatus column
+-- was included in the initial migration schema.
+-- Migration kept for historical purposes.

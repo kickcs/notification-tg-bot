@@ -1,1 +1,3 @@
-ALTER TABLE "reminders" ADD COLUMN "messageId" INTEGER;
+-- This migration is now redundant since the messageId column
+-- was included in the initial migration schema.
+-- Migration kept for historical purposes.
