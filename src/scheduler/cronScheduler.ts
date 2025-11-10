@@ -257,7 +257,7 @@ async function sendStandardReminder(bot: Bot<MyContext>, reminder: any, schedule
 
   scheduleRetry(bot, reminder.id, schedule.userId.toString(), BigInt(schedule.chatId), 0);
 
-  logger.debug(`Standard reminder ${reminder.id} sent to user ${schedule.userId} at ${currentTime}`);
+  logger.info(`Standard reminder ${reminder.id} sent to user ${schedule.userId} at ${currentTime}`);
 }
 
 async function sendSequentialReminder(bot: Bot<MyContext>, reminder: any) {
@@ -293,7 +293,7 @@ async function sendSequentialReminder(bot: Bot<MyContext>, reminder: any) {
 
   scheduleRetry(bot, reminder.id, reminder.schedule.userId.toString(), BigInt(reminder.schedule.chatId), 0);
 
-  logger.debug(`Sequential reminder ${reminder.id} (order: ${reminder.sequenceOrder || 0}) sent to user ${reminder.schedule.userId} at ${currentTime}`);
+  logger.info(`Sequential reminder ${reminder.id} (order: ${reminder.sequenceOrder || 0}) sent to user ${reminder.schedule.userId} at ${currentTime}`);
 }
 
 export async function scheduleNextSequentialReminder(
@@ -416,7 +416,7 @@ export async function scheduleNextSequentialReminder(
 
       setDelayedTaskWithCleanup(`${schedule.id}-${nextReminder.sequenceOrder}`, timeout);
       const delayDescription = getDelayDescription(Math.floor(delayMs / (1000 * 60)));
-      logger.debug(`Scheduled next reminder ${nextReminder.id} in ${delayDescription} at ${nextNotificationTime.toLocaleTimeString()}`);
+      logger.info(`Scheduled next reminder ${nextReminder.id} in ${delayDescription} at ${nextNotificationTime.toLocaleTimeString()}`);
     }
   } catch (error) {
     logger.error(`Error scheduling next sequential reminder: ${error}`);

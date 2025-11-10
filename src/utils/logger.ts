@@ -9,8 +9,8 @@ class Logger {
   private level: LogLevel;
 
   constructor() {
-    // В продакшене показываем только ошибки и предупреждения
-    this.level = process.env.NODE_ENV === 'production' ? LogLevel.WARN : LogLevel.DEBUG;
+    // В продакшене показываем ошибки, предупреждения и важные события
+    this.level = process.env.NODE_ENV === 'production' ? LogLevel.INFO : LogLevel.DEBUG;
   }
 
   private shouldLog(level: LogLevel): boolean {

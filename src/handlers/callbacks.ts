@@ -98,7 +98,7 @@ async function handleConfirmReminder(ctx: MyContext) {
       await scheduleNextSequentialReminder(getBotInstance(), reminderId);
     }
 
-    logger.debug(`Reminder ${reminderId} confirmed by user ${userId}${delayMinutes ? ` (delay: ${delayMinutes} min)` : ''}`);
+    logger.info(`Reminder ${reminderId} confirmed by user ${userId}${delayMinutes ? ` (delay: ${delayMinutes} min)` : ''}`);
   } catch (error) {
     console.error('Ошибка при подтверждении напоминания:', error);
     await ctx.answerCallbackQuery({ text: 'Произошла ошибка' });
@@ -480,7 +480,7 @@ async function handleSettingsSequential(ctx: MyContext) {
     for (const schedule of schedules) {
       try {
         await updateScheduleSequentialMode(schedule.id, isEnabled);
-        logger.debug(`Updated schedule ${schedule.id} for user ${userId}: useSequentialDelay = ${isEnabled}`);
+        logger.info(`Updated schedule ${schedule.id} for user ${userId}: useSequentialDelay = ${isEnabled}`);
       } catch (error) {
         console.error(`❌ Ошибка при обновлении расписания ${schedule.id}:`, error);
       }
