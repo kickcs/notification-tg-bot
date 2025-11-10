@@ -72,6 +72,26 @@ export function calculateNextNotificationTime(
   return addDelayToTime(scheduledTime, cappedDelay);
 }
 
+// Функция для расчета задержки уведомления в последовательном режиме
+export function calculateSequentialDelay(actualConfirmedAt: Date, scheduledTime: string): number {
+  const [hours, minutes] = scheduledTime.split(':').map(Number);
+
+  const scheduledDate = new Date();
+  scheduledDate.setHours(hours, minutes, 0, 0);
+  // Используем ту же дату, что и у подтверждения, но с временем из расписания
+  scheduledDate.setFullYear(actualConfirmedAt.getFullYear(), actualConfirmedAt.getMonth(), actualConfirmedAt.getDate());
+
+  // Если запланированное время еще не наступило сегодня, используем вчерашний день
+  if (scheduledDate > actualConfirmedAt) {
+    scheduledDate.setDate(scheduledDate.getDate() - 1);
+  }
+
+  const diffMs = actualConfirmedAt.getTime() - scheduledDate.getTime();
+  const diffMinutes = Math.floor(diffMs / (1000 * 60));
+
+  return Math.max(0, diffMinutes);
+}
+
 // Новая функция для расчета времени следующего уведомления в последовательном режиме
 export function calculateNextSequentialNotificationTime(
   previousScheduledTime: string,
@@ -79,8 +99,8 @@ export function calculateNextSequentialNotificationTime(
   actualConfirmedAt: Date,
   maxDelayMinutes: number
 ): Date {
-  // Рассчитываем задержку предыдущего уведомления
-  const previousDelay = calculateDelayAmount(actualConfirmedAt, previousScheduledTime);
+  // Рассчитываем задержку предыдущего уведомления через специальную функцию
+  const previousDelay = calculateSequentialDelay(actualConfirmedAt, previousScheduledTime);
   const cappedDelay = Math.min(previousDelay, maxDelayMinutes);
 
   // Добавляем эту же задержку ко времени следующего уведомления

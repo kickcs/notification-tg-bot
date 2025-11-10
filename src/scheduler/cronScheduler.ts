@@ -22,6 +22,7 @@ import {
   calculateDelayAmount,
   calculateNextNotificationTime,
   calculateNextSequentialNotificationTime,
+  calculateSequentialDelay,
   getDelayDescription
 } from '../utils/timeUtils';
 import { MyContext } from '../types/context';
@@ -383,7 +384,7 @@ export async function scheduleNextSequentialReminder(
     );
 
     // Логирование расчетов для отладки
-    const currentDelay = calculateDelayAmount(confirmedReminder.actualConfirmedAt!, currentScheduledTime);
+    const currentDelay = calculateSequentialDelay(confirmedReminder.actualConfirmedAt!, currentScheduledTime);
     const cappedDelay = Math.min(currentDelay, maxDelay);
     const now = new Date();
     const delayMs = nextNotificationTime.getTime() - now.getTime();
