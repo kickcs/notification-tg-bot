@@ -146,6 +146,15 @@ async function sendReminder(bot: Bot<MyContext>, scheduleId: string, userId: str
     }
 
     if (schedule.useSequentialDelay) {
+      // Проверяем, является ли текущее время первым уведомлением дня
+      const currentSequenceOrder = schedule.times.indexOf(time);
+      const isFirstReminderOfDay = currentSequenceOrder === 0;
+
+      if (isFirstReminderOfDay) {
+        // Если это первое уведомление дня, сбрасываем все старые отправленные уведомления
+        await resetDailySequence(scheduleId);
+      }
+
       // В последовательном режиме проверяем только ОТПРАВЛЕННЫЕ но неподтвержденные напоминания
       const hasSentButNotConfirmed = await hasSentButUnconfirmedReminders(scheduleId);
       if (hasSentButNotConfirmed) {
@@ -296,6 +305,28 @@ async function sendSequentialReminder(bot: Bot<MyContext>, reminder: any) {
   logger.info(`Sequential reminder ${reminder.id} (order: ${reminder.sequenceOrder || 0}) sent to user ${reminder.schedule.userId} at ${currentTime}`);
 }
 
+async function resetDailySequence(scheduleId: string) {
+  try {
+    // Сбрасываем все отправленные но неподтвержденные напоминания в pending статус
+    // Это нужно, чтобы на следующий день cron задачи могли работать нормально
+    await prisma.reminder.updateMany({
+      where: {
+        scheduleId,
+        status: 'sent',
+      },
+      data: {
+        status: 'pending',
+        messageId: null,
+        actualConfirmedAt: null,
+      }
+    });
+
+    logger.info(`Daily sequence reset for schedule ${scheduleId}`);
+  } catch (error) {
+    logger.error(`Error resetting daily sequence for schedule ${scheduleId}: ${error}`);
+  }
+}
+
 export async function scheduleNextSequentialReminder(
   bot: Bot<MyContext>,
   confirmedReminderId: string
@@ -315,6 +346,15 @@ export async function scheduleNextSequentialReminder(
       });
 
       if (!confirmedReminder || !confirmedReminder.schedule.useSequentialDelay) {
+        return null;
+      }
+
+      // Проверяем, является ли подтвержденное напоминание последним в дне
+      const isLastReminderOfDay = confirmedReminder.sequenceOrder === confirmedReminder.schedule.times.length - 1;
+
+      if (isLastReminderOfDay) {
+        logger.info(`Last reminder of day confirmed for schedule ${confirmedReminder.scheduleId}, sequence reset for next day`);
+        await resetDailySequence(confirmedReminder.scheduleId);
         return null;
       }
 
