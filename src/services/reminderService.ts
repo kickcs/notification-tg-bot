@@ -83,6 +83,33 @@ export async function hasPendingReminders(scheduleId: string): Promise<boolean> 
   return count > 0;
 }
 
+export async function hasUnconfirmedReminders(scheduleId: string): Promise<boolean> {
+  const count = await prisma.reminder.count({
+    where: {
+      scheduleId,
+      status: {
+        in: ['pending', 'processing'],
+      },
+    },
+  });
+
+  return count > 0;
+}
+
+export async function hasSentButUnconfirmedReminders(scheduleId: string): Promise<boolean> {
+  const count = await prisma.reminder.count({
+    where: {
+      scheduleId,
+      status: 'pending',
+      messageId: {
+        not: null,
+      },
+    },
+  });
+
+  return count > 0;
+}
+
 export async function getFirstPendingReminder(scheduleId: string) {
   return await prisma.reminder.findFirst({
     where: {

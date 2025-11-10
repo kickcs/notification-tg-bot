@@ -8,6 +8,8 @@ import {
   markReminderAsMissed,
   updateReminderMessageId,
   hasPendingReminders,
+  hasUnconfirmedReminders,
+  hasSentButUnconfirmedReminders,
   getFirstPendingReminder,
   getNextReminderInSequence,
   createRemindersForSchedule,
@@ -127,6 +129,8 @@ export function unregisterCronTasks(scheduleId: string) {
 
 async function sendReminder(bot: Bot<MyContext>, scheduleId: string, userId: string, chatId: bigint, time: string) {
   try {
+    console.log(`🔍 Проверка напоминания для расписания ${scheduleId} в ${time}`);
+
     // Для последовательного режима проверяем, есть ли уже pending напоминания
     const schedule = await prisma.schedule.findUnique({
       where: { id: scheduleId },
@@ -138,10 +142,17 @@ async function sendReminder(bot: Bot<MyContext>, scheduleId: string, userId: str
       return;
     }
 
+    console.log(`📋 Расписание ${scheduleId} found. useSequentialDelay: ${schedule.useSequentialDelay}, sequentialMode: ${schedule.user.sequentialMode}`);
+
     if (schedule.useSequentialDelay) {
-      const hasPending = await hasPendingReminders(scheduleId);
-      if (hasPending) {
-        console.log(`⏭️ Пропуск отправки для расписания ${scheduleId} - есть неподтвержденные напоминания`);
+      // Проверяем есть ли любые неподтвержденные напоминания (включая отправленные но не подтвержденные)
+      const hasUnconfirmed = await hasUnconfirmedReminders(scheduleId);
+      if (hasUnconfirmed) {
+        const hasSentButNotConfirmed = await hasSentButUnconfirmedReminders(scheduleId);
+        const statusMessage = hasSentButNotConfirmed
+          ? 'есть отправленные но неподтвержденные напоминания'
+          : 'есть неподтвержденные напоминания в обработке';
+        console.log(`⏭️ Пропуск отправки для расписания ${scheduleId} - ${statusMessage}`);
         return;
       }
 
@@ -152,6 +163,7 @@ async function sendReminder(bot: Bot<MyContext>, scheduleId: string, userId: str
         return;
       }
 
+      console.log(`📤 Отправка последовательного напоминания ${firstPending.id} для расписания ${scheduleId}`);
       await sendSequentialReminder(bot, firstPending);
     } else {
       // Обычный режим - создаем новое напоминание
@@ -253,6 +265,8 @@ async function sendStandardReminder(bot: Bot<MyContext>, reminder: any, schedule
 }
 
 async function sendSequentialReminder(bot: Bot<MyContext>, reminder: any) {
+  console.log(`📤 Отправка последовательного напоминания ${reminder.id} со статусом ${reminder.status}`);
+
   // Validate reminder has schedule data
   if (!hasValidSchedule(reminder)) {
     console.error(`❌ Напоминание ${reminder.id} не содержит данных о расписании или chatId`);
@@ -290,6 +304,8 @@ export async function scheduleNextSequentialReminder(
   bot: Bot<MyContext>,
   confirmedReminderId: string
 ) {
+  console.log(`🔄 Планирование следующего последовательного напоминания после подтверждения ${confirmedReminderId}`);
+
   try {
     // Используем транзакцию для предотвращения race conditions
     const result = await prisma.$transaction(async (tx) => {
