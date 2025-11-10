@@ -45,6 +45,8 @@ export function calculateDelayAmount(actualConfirmedAt: Date, scheduledTime: str
   const diffMs = actualConfirmedAt.getTime() - scheduledDate.getTime();
   const diffMinutes = Math.floor(diffMs / (1000 * 60));
 
+  // console.log(`[DEBUG] calculateDelayAmount: scheduled=${scheduledTime}, confirmed=${actualConfirmedAt.toLocaleTimeString()}, scheduledDate=${scheduledDate.toLocaleString()}, delay=${diffMinutes}min`);
+
   return Math.max(0, diffMinutes);
 }
 

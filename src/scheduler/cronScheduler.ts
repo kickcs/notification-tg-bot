@@ -382,15 +382,32 @@ export async function scheduleNextSequentialReminder(
       maxDelay
     );
 
-    const delayMs = nextNotificationTime.getTime() - Date.now();
+    // Логирование расчетов для отладки
+    const currentDelay = calculateDelayAmount(confirmedReminder.actualConfirmedAt!, currentScheduledTime);
+    const cappedDelay = Math.min(currentDelay, maxDelay);
+    const now = new Date();
+    const delayMs = nextNotificationTime.getTime() - now.getTime();
+
+    console.log(`⏰ Расчет времени для последовательного режима:`);
+    console.log(`   📅 Предыдущее время: ${currentScheduledTime}`);
+    console.log(`   📅 Следующее время: ${nextScheduledTime}`);
+    console.log(`   ✅ Время подтверждения: ${confirmedReminder.actualConfirmedAt!.toLocaleTimeString()}`);
+    console.log(`   📊 Задержка предыдущего: ${currentDelay} мин`);
+    console.log(`   📊 Ограниченная задержка: ${cappedDelay} мин (макс: ${maxDelay})`);
+    console.log(`   📅 Расчетное время: ${nextNotificationTime.toLocaleTimeString()}`);
+    console.log(`   📅 Текущее время: ${now.toLocaleTimeString()}`);
+    console.log(`   ⏱️  Задержка отправки: ${Math.floor(delayMs / 1000)} сек`);
 
     if (delayMs <= 0) {
       // Если время уже прошло, отправляем сразу
+      console.log(`   🚀 Отправка сразу (время уже прошло)`);
       await sendSequentialReminder(bot, nextReminder);
     } else {
       // Планируем отложенную отправку
+      console.log(`   ⏳ Планирование отложенной отправки`);
       const timeout = setTimeout(async () => {
         try {
+          console.log(`   ⏰ Отложенное напоминание ${nextReminder.id} готово к отправке`);
           await sendSequentialReminder(bot, nextReminder);
         } catch (error) {
           console.error('❌ Ошибка при отправке отложенного напоминания:', error);
