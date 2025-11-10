@@ -470,8 +470,21 @@ async function handleSettingsSequential(ctx: MyContext) {
 
   try {
     await updateUserByTelegramId(BigInt(userId), { sequentialMode: isEnabled });
-    await ctx.answerCallbackQuery({ text: `✅ Режим ${isEnabled ? 'включен' : 'выключен'}` });
 
+    // Обновляем все существующие расписания пользователя
+    const { updateScheduleSequentialMode, getUserSchedules } = await import('../services/scheduleService');
+    const schedules = await getUserSchedules(userId.toString());
+
+    for (const schedule of schedules) {
+      try {
+        await updateScheduleSequentialMode(schedule.id, isEnabled);
+        console.log(`🔄 Обновлено расписание ${schedule.id} для пользователя ${userId}: useSequentialDelay = ${isEnabled}`);
+      } catch (error) {
+        console.error(`❌ Ошибка при обновлении расписания ${schedule.id}:`, error);
+      }
+    }
+
+    await ctx.answerCallbackQuery({ text: `✅ Режим ${isEnabled ? 'включен' : 'выключен'}` });
     await showSettingsMenu(ctx);
   } catch (error) {
     console.error('Ошибка при обновлении режима последовательности:', error);

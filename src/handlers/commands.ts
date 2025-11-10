@@ -104,29 +104,16 @@ async function handleSetReminder(ctx: Context) {
             });
         }
 
-        const {prisma} = await import('../lib/prisma');
-
         // Получаем настройки пользователя для определения режима по умолчанию
         const userSettings = await getUserSettings(dbUser.id);
         const defaultSequentialMode = userSettings.sequentialMode;
 
-        // Для последовательного режима создаем все напоминания заранее
-        let schedule;
-        if (defaultSequentialMode) {
-            schedule = await prisma.schedule.create({
-                data: {
-                    userId: dbUser.id,
-                    chatId: BigInt(chatId),
-                    times,
-                    useSequentialDelay: true,
-                    isActive: true,
-                },
-            });
+        // Создаем расписание с учетом настроек пользователя
+        const schedule = await createSchedule(dbUser.id, BigInt(chatId), times, defaultSequentialMode);
 
-            // Создаем все напоминания для последовательности
+        // Если включен последовательный режим, создаем все напоминания заранее
+        if (defaultSequentialMode) {
             await createRemindersForSchedule(schedule.id, times);
-        } else {
-            schedule = await createSchedule(dbUser.id, BigInt(chatId), times);
         }
 
         for (const time of times) {
